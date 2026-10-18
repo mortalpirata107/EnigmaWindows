@@ -26,6 +26,7 @@ mod desktop_notifications;
 mod connectivities;
 mod models_config;
 
+#[cfg(target_os = "linux")]
 use gtk::prelude::*;
 use tauri::{Manager, Emitter, WebviewWindow};
 
@@ -41,34 +42,53 @@ fn focus_window(app_name: Option<String>, id: Option<String>) -> Result<(), Stri
         return Ok(());
     }
 
-    // 1. Try wmctrl -a "nombre_de_la_app"
-    if let Ok(status) = std::process::Command::new("wmctrl").arg("-a").arg(&target).status() {
-        if status.success() {
-            eprintln!("[focus_window] Focused via wmctrl: {}", target);
-            return Ok(());
+    #[cfg(target_os = "linux")]
+    {
+        // 1. Try wmctrl -a "nombre_de_la_app"
+        if let Ok(status) = std::process::Command::new("wmctrl").arg("-a").arg(&target).status() {
+            if status.success() {
+                eprintln!("[focus_window] Focused via wmctrl: {}", target);
+                return Ok(());
+            }
+        }
+
+        // 2. Native Wayland fallback for KDE Plasma 6 (qdbus6 WindowsRunner Match & Run)
+        let windows = windows::get_open_windows();
+        let lower_target = target.to_lowercase();
+        if let Some(win) = windows.iter().find(|w| {
+            w.id == target
+                || w.app_name.to_lowercase().contains(&lower_target)
+                || lower_target.contains(&w.app_name.to_lowercase())
+                || w.window_class.to_lowercase().contains(&lower_target)
+                || lower_target.contains(&w.window_class.to_lowercase())
+                || w.title.to_lowercase().contains(&lower_target)
+        }) {
+            if let Ok(()) = windows::focus_window_by_id(&win.id) {
+                eprintln!("[focus_window] Focused via KWin WindowsRunner: {} ({})", win.app_name, win.id);
+                return Ok(());
+            }
+        }
+
+        // 3. If target was already a KWin window ID like "0_{...}"
+        if target.starts_with("0_{") {
+            let _ = windows::focus_window_by_id(&target);
         }
     }
 
-    // 2. Native Wayland fallback for KDE Plasma 6 (qdbus6 WindowsRunner Match & Run)
-    let windows = windows::get_open_windows();
-    let lower_target = target.to_lowercase();
-    if let Some(win) = windows.iter().find(|w| {
-        w.id == target
-            || w.app_name.to_lowercase().contains(&lower_target)
-            || lower_target.contains(&w.app_name.to_lowercase())
-            || w.window_class.to_lowercase().contains(&lower_target)
-            || lower_target.contains(&w.window_class.to_lowercase())
-            || w.title.to_lowercase().contains(&lower_target)
-    }) {
-        if let Ok(()) = windows::focus_window_by_id(&win.id) {
-            eprintln!("[focus_window] Focused via KWin WindowsRunner: {} ({})", win.app_name, win.id);
-            return Ok(());
+    #[cfg(not(target_os = "linux"))]
+    {
+        let windows = windows::get_open_windows();
+        let lower_target = target.to_lowercase();
+        if let Some(win) = windows.iter().find(|w| {
+            w.id == target
+                || w.app_name.to_lowercase().contains(&lower_target)
+                || lower_target.contains(&w.app_name.to_lowercase())
+                || w.title.to_lowercase().contains(&lower_target)
+        }) {
+            let _ = windows::focus_window_by_id(&win.id);
+        } else {
+            let _ = windows::focus_window_by_id(&target);
         }
-    }
-
-    // 3. If target was already a KWin window ID like "0_{...}"
-    if target.starts_with("0_{") {
-        let _ = windows::focus_window_by_id(&target);
     }
 
     Ok(())
@@ -91,6 +111,7 @@ fn stop_stt() -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(unix)]
 fn forward_cli_args_to_socket(args: &[String]) -> bool {
     let mut msg = None;
     if args.iter().any(|a| a == "--search" || a == "--toggle-search") {
@@ -139,11 +160,13 @@ fn forward_cli_args_to_socket(args: &[String]) -> bool {
     false
 }
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
+#[cfg(not(unix))]
+fn forward_cli_args_to_socket(_args: &[String]) -> bool {
+    false
+}
 
-    // Bloqueo a nivel de kernel (flock) para garantizar que NUNCA se abran dos instancias
-    // simultáneas al reiniciar el PC (evita conflicto entre autostart y activación D-Bus).
+#[cfg(unix)]
+fn acquire_single_instance_lock(args: &[String]) -> bool {
     let lock_path = std::env::var("XDG_RUNTIME_DIR")
         .map(|p| format!("{}/enigmaos.lock", p))
         .unwrap_or_else(|_| "/tmp/enigmaos.lock".to_string());
@@ -155,55 +178,69 @@ fn main() {
         .truncate(false)
         .open(&lock_path);
 
-    let _instance_lock = match lock_file {
+    match lock_file {
         Ok(file) => {
             use std::os::unix::io::AsRawFd;
             let fd = file.as_raw_fd();
             let res = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
             if res != 0 {
                 // Ya hay otra instancia activa en el sistema.
-                if forward_cli_args_to_socket(&args) {
+                if forward_cli_args_to_socket(args) {
                     eprintln!("[SingleInstance] Acción reenviada a la instancia activa. Saliendo limpiamente.");
                 } else {
                     eprintln!("[SingleInstance] Ya existe una instancia de EnigmaOS en ejecución. Saliendo sin duplicar.");
                 }
-                return;
+                return false;
             }
-            // Mantenemos el descriptor abierto durante toda la vida del proceso;
-            // el kernel de Linux lo libera de forma automática si el proceso se cierra o finaliza.
             Box::leak(Box::new(file));
             true
         }
         Err(e) => {
             eprintln!("[SingleInstance] Advertencia: No se pudo abrir {}: {}", lock_path, e);
-            false
+            true
         }
-    };
+    }
+}
+
+#[cfg(not(unix))]
+fn acquire_single_instance_lock(_args: &[String]) -> bool {
+    true
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+
+    if !acquire_single_instance_lock(&args) {
+        return;
+    }
 
     let _ = dotenvy::dotenv();
     let _ = dotenvy::from_filename("src-tauri/.env");
     memory::init_core_memory();
     personas::init_default_personas();
 
-    if std::env::var("GDK_BACKEND").is_err() {
-        if std::env::var("WAYLAND_DISPLAY").is_ok() {
-            std::env::set_var("GDK_BACKEND", "wayland,x11");
-        } else {
-            std::env::set_var("GDK_BACKEND", "x11");
+    #[cfg(target_os = "linux")]
+    {
+        if std::env::var("GDK_BACKEND").is_err() {
+            if std::env::var("WAYLAND_DISPLAY").is_ok() {
+                std::env::set_var("GDK_BACKEND", "wayland,x11");
+            } else {
+                std::env::set_var("GDK_BACKEND", "x11");
+            }
         }
-    }
-    std::env::set_var("TAURI_LINUX_USE_GTK", "1");
-    // Previene error de protocolo Wayland (error 4 de explicit sync en drivers NVIDIA 555-615)
-    if std::env::var("__NV_DISABLE_EXPLICIT_SYNC").is_err() {
-        std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1");
-    }
-    // El renderer DMABUF de WebKitGTK es el único que repinta correctamente TODA la superficie en Wayland
-    // (con WEBKIT_DISABLE_DMABUF_RENDERER=1 solo se pintaba el canvas WebGL y el resto del notch/dock
-    // quedaba recortado). Aseguramos que se limpie de cualquier entorno heredado a menos que se pida explícitamente.
-    if std::env::var("DTB_DISABLE_DMABUF").is_err() {
-        std::env::remove_var("WEBKIT_DISABLE_DMABUF_RENDERER");
-    } else {
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        std::env::set_var("TAURI_LINUX_USE_GTK", "1");
+        // Previene error de protocolo Wayland (error 4 de explicit sync en drivers NVIDIA 555-615)
+        if std::env::var("__NV_DISABLE_EXPLICIT_SYNC").is_err() {
+            std::env::set_var("__NV_DISABLE_EXPLICIT_SYNC", "1");
+        }
+        // El renderer DMABUF de WebKitGTK es el único que repinta correctamente TODA la superficie en Wayland
+        // (con WEBKIT_DISABLE_DMABUF_RENDERER=1 solo se pintaba el canvas WebGL y el resto del notch/dock
+        // quedaba recortado). Aseguramos que se limpie de cualquier entorno heredado a menos que se pida explícitamente.
+        if std::env::var("DTB_DISABLE_DMABUF").is_err() {
+            std::env::remove_var("WEBKIT_DISABLE_DMABUF_RENDERER");
+        } else {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
     }
 
     let startup_args = args.clone();
@@ -225,6 +262,7 @@ fn main() {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().register("alt+3");
             }
+
             #[cfg(target_os = "linux")]
             {
                 if let Some(window) = app.get_webview_window("main") {
@@ -324,58 +362,72 @@ fn main() {
                     }
                     let _ = dock_window.show();
                 }
-
-                // Initialize SQLite core DB
-                if let Err(e) = db::init_db() {
-                    eprintln!("[SQLite] Error initializing database: {}", e);
-                }
-
-                // Initialize default personas folder and templates
-                personas::init_default_personas();
-
-                // Start real-time background threads for immediate UI responsiveness
-                mpris::start_media_poller(app.handle().clone());
-                windows::start_window_poller(app.handle().clone());
-                windows::init_active_window_tracker(app.handle().clone());
-                dock::start_process_monitor(app.handle().clone());
-                global_shortcut::start_global_shortcut_listener(app.handle().clone());
-                desktop_notifications::start_notification_server(app.handle().clone());
-                enigma::set_speech_app_handle(app.handle().clone());
-                clipboard::start_clipboard_monitor(app.handle().clone());
-
-                let args_for_startup = startup_args.clone();
-                let app_handle_for_startup = app.handle().clone();
-                std::thread::spawn(move || {
-                    if args_for_startup.iter().any(|a| a == "--search" || a == "--toggle-search") {
-                        std::thread::sleep(std::time::Duration::from_millis(600));
-                        let _ = app_handle_for_startup.emit("open-search", ());
-                    } else if args_for_startup.iter().any(|a| a == "--clipboard" || a == "--toggle-clipboard") {
-                        std::thread::sleep(std::time::Duration::from_millis(600));
-                        let _ = app_handle_for_startup.emit("open-clipboard-history", ());
-                    }
-                });
-
-                // Pre-warm system applications cache in memory immediately on background thread
-                std::thread::spawn(|| {
-                    system::prewarm_system_apps();
-                });
-
-                // Defer heavy secondary services (Node.js WhatsApp, Vosk STT, Telegram, Telemetry)
-                // by 1.5 seconds so the top bar and dock display and paint instantly (<200ms)
-                let app_handle_deferred = app.handle().clone();
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(1500));
-                    eprintln!("[Startup] Launching deferred background services...");
-                    system::start_system_poller(app_handle_deferred.clone());
-                    whatsapp_bridge::start_whatsapp_bridge();
-                    whatsapp_bridge::start_contacts_sync_daemon(app_handle_deferred.clone());
-                    wake_word::start_wake_word_listener(app_handle_deferred.clone());
-                    telemetry::start_telemetry_daemon();
-                    messenger_bridge::start_telegram_bot(app_handle_deferred.clone());
-                    scheduler::start_scheduler(app_handle_deferred.clone());
-                    db::start_notification_daemon();
-                });
             }
+
+            #[cfg(not(target_os = "linux"))]
+            {
+                if let Some(window) = app.get_webview_window("main") {
+                    window_strut::setup_window_for_platform(&window);
+                    window_strut::start_mouse_hit_test_tracker(window.clone());
+                    let _ = window.show();
+                }
+                if let Some(dock_window) = app.get_webview_window("dock") {
+                    window_strut::setup_window_for_platform(&dock_window);
+                    let _ = dock_window.show();
+                }
+            }
+
+            // Initialize SQLite core DB
+            if let Err(e) = db::init_db() {
+                eprintln!("[SQLite] Error initializing database: {}", e);
+            }
+
+            // Initialize default personas folder and templates
+            personas::init_default_personas();
+
+            // Start real-time background threads for immediate UI responsiveness
+            mpris::start_media_poller(app.handle().clone());
+            windows::start_window_poller(app.handle().clone());
+            windows::init_active_window_tracker(app.handle().clone());
+            dock::start_process_monitor(app.handle().clone());
+            global_shortcut::start_global_shortcut_listener(app.handle().clone());
+            desktop_notifications::start_notification_server(app.handle().clone());
+            enigma::set_speech_app_handle(app.handle().clone());
+            clipboard::start_clipboard_monitor(app.handle().clone());
+
+            let args_for_startup = startup_args.clone();
+            let app_handle_for_startup = app.handle().clone();
+            std::thread::spawn(move || {
+                if args_for_startup.iter().any(|a| a == "--search" || a == "--toggle-search") {
+                    std::thread::sleep(std::time::Duration::from_millis(600));
+                    let _ = app_handle_for_startup.emit("open-search", ());
+                } else if args_for_startup.iter().any(|a| a == "--clipboard" || a == "--toggle-clipboard") {
+                    std::thread::sleep(std::time::Duration::from_millis(600));
+                    let _ = app_handle_for_startup.emit("open-clipboard-history", ());
+                }
+            });
+
+            // Pre-warm system applications cache in memory immediately on background thread
+            std::thread::spawn(|| {
+                system::prewarm_system_apps();
+            });
+
+            // Defer heavy secondary services (Node.js WhatsApp, Vosk STT, Telegram, Telemetry)
+            // by 1.5 seconds so the top bar and dock display and paint instantly (<200ms)
+            let app_handle_deferred = app.handle().clone();
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_millis(1500));
+                eprintln!("[Startup] Launching deferred background services...");
+                system::start_system_poller(app_handle_deferred.clone());
+                whatsapp_bridge::start_whatsapp_bridge();
+                whatsapp_bridge::start_contacts_sync_daemon(app_handle_deferred.clone());
+                wake_word::start_wake_word_listener(app_handle_deferred.clone());
+                telemetry::start_telemetry_daemon();
+                messenger_bridge::start_telegram_bot(app_handle_deferred.clone());
+                scheduler::start_scheduler(app_handle_deferred.clone());
+                db::start_notification_daemon();
+            });
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

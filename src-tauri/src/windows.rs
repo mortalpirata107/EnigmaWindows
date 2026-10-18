@@ -91,10 +91,16 @@ pub fn update_current_active_window(uuid: String, title: String, class: String) 
     }
 }
 
+fn dirs_fallback_data_dir() -> std::path::PathBuf {
+    dirs::data_dir().unwrap_or_else(|| std::path::PathBuf::from("/tmp"))
+}
+
+#[cfg(target_os = "linux")]
 struct ActiveTrackerService {
     app_handle: AppHandle,
 }
 
+#[cfg(target_os = "linux")]
 #[zbus::interface(name = "org.dynamictopbar.ActiveWindowTracker")]
 impl ActiveTrackerService {
     async fn notify_active(&self, uuid: String, title: String, class: String) {
@@ -116,21 +122,10 @@ impl ActiveTrackerService {
             "title": clean_title,
             "class": clean_class,
         }));
-        // Window snapshots are generated on-demand when hovering over dock previews,
-        // preventing invasive spectacle compositor flashes during regular window switching.
     }
 }
 
-fn dirs_fallback_data_dir() -> std::path::PathBuf {
-    if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
-        std::path::PathBuf::from(data_home)
-    } else if let Ok(home) = std::env::var("HOME") {
-        std::path::PathBuf::from(home).join(".local").join("share")
-    } else {
-        std::path::PathBuf::from("/tmp")
-    }
-}
-
+#[cfg(target_os = "linux")]
 fn deploy_kwin_script() {
     let script_dir = dirs_fallback_data_dir().join("dynamictopbar");
     let _ = std::fs::create_dir_all(&script_dir);
@@ -181,7 +176,6 @@ notifyActive(workspace.activeWindow);
     let qdbus = get_qdbus_bin();
     let script_path_str = script_path.to_string_lossy().to_string();
 
-    // Unload any previously loaded instance
     let _ = Command::new(qdbus)
         .args([
             "org.kde.KWin",
@@ -191,7 +185,6 @@ notifyActive(workspace.activeWindow);
         ])
         .output();
 
-    // Load script
     let load_res = Command::new(qdbus)
         .args([
             "org.kde.KWin",
@@ -211,7 +204,7 @@ notifyActive(workspace.activeWindow);
     }
 }
 
-/// Initializes the real-time active window listener via session D-Bus and KWin script
+#[cfg(target_os = "linux")]
 pub fn init_active_window_tracker(app_handle: AppHandle) {
     tauri::async_runtime::spawn(async move {
         let service = ActiveTrackerService {
@@ -228,7 +221,6 @@ pub fn init_active_window_tracker(app_handle: AppHandle) {
                         Ok(conn) => {
                             eprintln!("[ActiveWindowTracker] D-Bus service 'org.dynamictopbar.ActiveWindowTracker' online.");
                             deploy_kwin_script();
-                            // Keep connection alive
                             let _held = conn;
                             loop {
                                 tokio::time::sleep(Duration::from_secs(3600)).await;
@@ -244,8 +236,82 @@ pub fn init_active_window_tracker(app_handle: AppHandle) {
     });
 }
 
+#[cfg(target_os = "windows")]
+pub fn init_active_window_tracker(app_handle: AppHandle) {
+    std::thread::spawn(move || {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW, GetWindowTextLengthW};
+        let mut last_hwnd: usize = 0;
+        loop {
+            std::thread::sleep(Duration::from_millis(300));
+            let fg = unsafe { GetForegroundWindow() };
+            let fg_val = fg as usize;
+            if fg_val != last_hwnd && fg_val != 0 {
+                last_hwnd = fg_val;
+                let len = unsafe { GetWindowTextLengthW(fg) };
+                let mut title = String::new();
+                if len > 0 {
+                    let mut buf = vec![0u16; (len + 1) as usize];
+                    let copied = unsafe { GetWindowTextW(fg, buf.as_mut_ptr(), len + 1) };
+                    if copied > 0 {
+                        title = String::from_utf16_lossy(&buf[..copied as usize]);
+                    }
+                }
+                let clean_title = title.trim().to_string();
+                let clean_uuid = format!("{}", fg_val);
+                let app_name = infer_app_name(&clean_title, "");
+                let clean_class = infer_window_class(&clean_title, &app_name);
+
+                update_current_active_window(clean_uuid.clone(), clean_title.clone(), clean_class.clone());
+                let updated_windows = get_open_windows();
+                let _ = app_handle.emit("open_windows_changed", updated_windows);
+                let _ = app_handle.emit("active_window_changed", serde_json::json!({
+                    "uuid": clean_uuid,
+                    "title": clean_title,
+                    "class": clean_class,
+                }));
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "macos")]
+pub fn init_active_window_tracker(app_handle: AppHandle) {
+    std::thread::spawn(move || {
+        let mut last_active = String::new();
+        loop {
+            std::thread::sleep(Duration::from_millis(500));
+            if let Ok(out) = Command::new("osascript")
+                .args(["-e", "tell application \"System Events\" to get name of first application process whose frontmost is true"])
+                .output()
+            {
+                let app_name = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !app_name.is_empty() && app_name != last_active {
+                    last_active = app_name.clone();
+                    let clean_uuid = app_name.clone();
+                    let clean_title = app_name.clone();
+                    let clean_class = infer_window_class(&clean_title, &app_name);
+
+                    update_current_active_window(clean_uuid.clone(), clean_title.clone(), clean_class.clone());
+                    let updated_windows = get_open_windows();
+                    let _ = app_handle.emit("open_windows_changed", updated_windows);
+                    let _ = app_handle.emit("active_window_changed", serde_json::json!({
+                        "uuid": clean_uuid,
+                        "title": clean_title,
+                        "class": clean_class,
+                    }));
+                }
+            }
+        }
+    });
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+pub fn init_active_window_tracker(_app_handle: AppHandle) {}
+
+#[cfg(target_os = "linux")]
 static QDBUS_BIN: OnceLock<&'static str> = OnceLock::new();
 
+#[cfg(target_os = "linux")]
 fn get_qdbus_bin() -> &'static str {
     *QDBUS_BIN.get_or_init(|| {
         if Command::new("which").arg("qdbus6").output().map(|o| o.status.success()).unwrap_or(false) {
@@ -375,7 +441,8 @@ fn infer_icon(app_name: &str, title: &str) -> String {
     "app-window".to_string()
 }
 
-/// Returns the list of currently open windows in KDE Plasma 6 Wayland with real active status
+/// Returns the list of currently open windows
+#[cfg(target_os = "linux")]
 #[tauri::command]
 pub fn get_open_windows() -> Vec<OpenWindowItem> {
     let qdbus = get_qdbus_bin();
@@ -499,21 +566,182 @@ static WINDOW_CLASS_CACHE: RwLock<Option<std::collections::HashMap<String, Strin
     windows
 }
 
-/// Natively focuses and raises an open window in KDE Plasma 6 Wayland
-pub fn focus_window_by_id(id: &str) -> Result<(), String> {
-    let qdbus = get_qdbus_bin();
-    let status = Command::new(qdbus)
-        .args(["org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", id, ""])
-        .status()
-        .map_err(|e| format!("Failed to focus window: {}", e))?;
+#[cfg(target_os = "windows")]
+#[tauri::command]
+pub fn get_open_windows() -> Vec<OpenWindowItem> {
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetWindowTextW, GetWindowTextLengthW, IsWindowVisible, GetForegroundWindow
+    };
 
-    if status.success() {
-        // Optimistically set active window
-        let clean_uuid = id.trim_start_matches("0_").to_string();
-        update_current_active_window(clean_uuid, String::new(), String::new());
+    let mut windows: Vec<OpenWindowItem> = Vec::new();
+    let fg_hwnd = unsafe { GetForegroundWindow() };
+
+    unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let windows = &mut *(lparam as *mut Vec<OpenWindowItem>);
+        if IsWindowVisible(hwnd) == 0 {
+            return 1;
+        }
+
+        let len = GetWindowTextLengthW(hwnd);
+        if len == 0 {
+            return 1;
+        }
+
+        let mut buf = vec![0u16; (len + 1) as usize];
+        let copied = GetWindowTextW(hwnd, buf.as_mut_ptr(), len + 1);
+        if copied == 0 {
+            return 1;
+        }
+
+        let title = String::from_utf16_lossy(&buf[..copied as usize]);
+        let title_clean = title.trim();
+
+        if title_clean.is_empty()
+            || title_clean == "Program Manager"
+            || title_clean == "EnigmaOS"
+            || title_clean == "EnigmaDock"
+            || title_clean == "Settings"
+            || title_clean == "Windows Input Experience"
+        {
+            return 1;
+        }
+
+        let hwnd_val = hwnd as usize;
+        let id = format!("{}", hwnd_val);
+        let app_name = infer_app_name(title_clean, "");
+        let window_class = infer_window_class(title_clean, &app_name);
+        let icon = infer_icon(&app_name, title_clean);
+        let is_active = (hwnd == unsafe { GetForegroundWindow() });
+
+        windows.push(OpenWindowItem {
+            id: id.clone(),
+            uuid: id,
+            title: title_clean.to_string(),
+            app_name,
+            window_class,
+            icon,
+            is_active,
+        });
+
+        1
+    }
+
+    unsafe {
+        EnumWindows(Some(enum_proc), &mut windows as *mut _ as LPARAM);
+    }
+
+    windows
+}
+
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub fn get_open_windows() -> Vec<OpenWindowItem> {
+    let mut windows = Vec::new();
+    let script = r#"tell application "System Events"
+        set appList to {}
+        repeat with p in (every process whose background only is false)
+            try
+                set pName to name of p
+                set pId to id of p as string
+                set wTitle to ""
+                tell p
+                    if (count of windows) > 0 then
+                        set wTitle to name of window 1
+                    end if
+                end tell
+                set end of appList to pId & ":::" & pName & ":::" & wTitle
+            end try
+        end repeat
+        return appList
+    end tell"#;
+
+    if let Ok(out) = Command::new("osascript").args(["-e", script]).output() {
+        let text = String::from_utf8_lossy(&out.stdout);
+        for item in text.split(", ") {
+            let parts: Vec<&str> = item.trim().split(":::").collect();
+            if parts.len() >= 2 {
+                let id = parts[0].trim().to_string();
+                let app_name = parts[1].trim().to_string();
+                let title = parts.get(2).map(|s| s.trim()).unwrap_or(&app_name).to_string();
+
+                if app_name.is_empty()
+                    || app_name.eq_ignore_ascii_case("EnigmaOS")
+                    || app_name.eq_ignore_ascii_case("EnigmaDock")
+                    || app_name.eq_ignore_ascii_case("Finder")
+                {
+                    continue;
+                }
+
+                let window_class = infer_window_class(&title, &app_name);
+                let icon = infer_icon(&app_name, &title);
+                windows.push(OpenWindowItem {
+                    id: id.clone(),
+                    uuid: id,
+                    title,
+                    app_name,
+                    window_class,
+                    icon,
+                    is_active: false,
+                });
+            }
+        }
+    }
+    windows
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+#[tauri::command]
+pub fn get_open_windows() -> Vec<OpenWindowItem> {
+    Vec::new()
+}
+
+/// Natively focuses and raises an open window
+pub fn focus_window_by_id(id: &str) -> Result<(), String> {
+    #[cfg(target_os = "linux")]
+    {
+        let qdbus = get_qdbus_bin();
+        let status = Command::new(qdbus)
+            .args(["org.kde.KWin", "/WindowsRunner", "org.kde.krunner1.Run", id, ""])
+            .status()
+            .map_err(|e| format!("Failed to focus window: {}", e))?;
+
+        if status.success() {
+            let clean_uuid = id.trim_start_matches("0_").to_string();
+            update_current_active_window(clean_uuid, String::new(), String::new());
+            Ok(())
+        } else {
+            Err(format!("qdbus command exited with error status {:?}", status))
+        }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::Foundation::HWND;
+        use windows_sys::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_RESTORE};
+        if let Ok(hwnd_val) = id.parse::<usize>() {
+            let hwnd = hwnd_val as HWND;
+            unsafe {
+                ShowWindow(hwnd, SW_RESTORE);
+                SetForegroundWindow(hwnd);
+            }
+            return Ok(());
+        }
+        Err("Invalid HWND id".to_string())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("osascript")
+            .args(["-e", &format!("tell application \"{}\" to activate", id)])
+            .status();
         Ok(())
-    } else {
-        Err(format!("qdbus command exited with error status {:?}", status))
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        let _ = id;
+        Ok(())
     }
 }
 
@@ -551,6 +779,7 @@ pub fn focus_app_or_window(query: &str) -> Result<String, String> {
     Err(format!("No se encontró ninguna ventana abierta que coincida con '{}'.", clean))
 }
 
+#[cfg(target_os = "linux")]
 fn run_kwin_window_action(uuid_or_id: &str, action: &str) -> Result<(), String> {
     let clean_target = uuid_or_id
         .trim_start_matches("0_")
@@ -643,22 +872,108 @@ for (var i = 0; i < wins.length; ++i) {{
     Err("Fallo al ejecutar acción de ventana en KWin vía D-Bus.".to_string())
 }
 
-/// Natively toggles window minimized state in KDE Plasma 6 Wayland
+/// Natively toggles window minimized state
 #[tauri::command]
 pub fn minimize_window(id: String) -> Result<(), String> {
-    run_kwin_window_action(&id, "minimize")
+    #[cfg(target_os = "linux")]
+    {
+        run_kwin_window_action(&id, "minimize")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd_val) = id.parse::<usize>() {
+            unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                    hwnd_val as _,
+                    windows_sys::Win32::UI::WindowsAndMessaging::SW_MINIMIZE,
+                );
+            }
+            return Ok(());
+        }
+        Err("Invalid HWND".into())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("osascript")
+            .args(["-e", &format!("tell application \"System Events\" to set miniaturized of window 1 of (first process whose name is \"{}\") to true", id)])
+            .status();
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        let _ = id;
+        Ok(())
+    }
 }
 
-/// Natively toggles window maximized state in KDE Plasma 6 Wayland
+/// Natively toggles window maximized state
 #[tauri::command]
 pub fn maximize_window(id: String) -> Result<(), String> {
-    run_kwin_window_action(&id, "maximize")
+    #[cfg(target_os = "linux")]
+    {
+        run_kwin_window_action(&id, "maximize")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd_val) = id.parse::<usize>() {
+            unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::ShowWindow(
+                    hwnd_val as _,
+                    windows_sys::Win32::UI::WindowsAndMessaging::SW_MAXIMIZE,
+                );
+            }
+            return Ok(());
+        }
+        Err("Invalid HWND".into())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("osascript")
+            .args(["-e", &format!("tell application \"System Events\" to set zoomed of window 1 of (first process whose name is \"{}\") to true", id)])
+            .status();
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        let _ = id;
+        Ok(())
+    }
 }
 
-/// Gracefully closes a window in KDE Plasma 6 Wayland using standard closeWindow event
+/// Gracefully closes a window
 #[tauri::command]
 pub fn close_window_cleanly(id: String) -> Result<(), String> {
-    run_kwin_window_action(&id, "close")
+    #[cfg(target_os = "linux")]
+    {
+        run_kwin_window_action(&id, "close")
+    }
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(hwnd_val) = id.parse::<usize>() {
+            unsafe {
+                windows_sys::Win32::UI::WindowsAndMessaging::PostMessageW(
+                    hwnd_val as _,
+                    windows_sys::Win32::UI::WindowsAndMessaging::WM_CLOSE,
+                    0,
+                    0,
+                );
+            }
+            return Ok(());
+        }
+        Err("Invalid HWND".into())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("osascript")
+            .args(["-e", &format!("tell application \"{}\" to quit", id)])
+            .status();
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
+    {
+        let _ = id;
+        Ok(())
+    }
 }
 
 /// Focuses the last active user application window (Antigravity IDE, browser, terminal, etc.),

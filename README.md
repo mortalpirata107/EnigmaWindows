@@ -5,12 +5,14 @@
 </p>
 
 <p align="center">
-  <strong>Entorno de sobrecubierta futurista, Dynamic Island, Dock inteligente y Asistente de IA multimodal para Linux (Wayland & X11).</strong>
+  <strong>Entorno de sobrecubierta futurista, Dynamic Island, Dock inteligente y Asistente de IA multimodal para Windows, macOS y Linux.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/mortalpirata107/EnigmaOS/releases"><img src="https://img.shields.io/github/v/release/mortalpirata107/EnigmaOS?style=for-the-badge&color=red" alt="Release" /></a>
-  <img src="https://img.shields.io/badge/Platform-Linux%20Wayland%20%7C%20X11-red?style=for-the-badge&logo=linux" alt="Linux Wayland" />
+  <a href="https://github.com/mortalpirata107/EnigmaWindows/releases"><img src="https://img.shields.io/github/v/release/mortalpirata107/EnigmaWindows?style=for-the-badge&color=red" alt="Release" /></a>
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-blue?style=for-the-badge&logo=windows" alt="Windows Support" />
+  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?style=for-the-badge&logo=apple" alt="macOS Support" />
+  <img src="https://img.shields.io/badge/Linux-Wayland%20%7C%20X11-red?style=for-the-badge&logo=linux" alt="Linux Wayland" />
   <img src="https://img.shields.io/badge/Built%20With-Tauri%20v2-24C8D8?style=for-the-badge&logo=tauri" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/Backend-Rust-DEA584?style=for-the-badge&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/Frontend-React%2019%20%7C%20TypeScript-61DAFB?style=for-the-badge&logo=react" alt="React TypeScript" />
@@ -20,8 +22,20 @@
 
 ---
 
-## ⚡ Instalación Rápida (1 Solo Comando)
+## ⚡ Instalación y Descargas por Plataforma
 
+EnigmaOS está disponible de forma nativa para **Windows**, **macOS** y **Linux**:
+
+### 🪟 Windows (10 / 11)
+- **Instalador NSIS (`.exe`):** Asistente gráfico de instalación rápida.
+- **Paquete MSI (`.msi`):** Instalador empresarial para despliegues con políticas de sistema.
+- **Requisitos:** WebView2 Runtime (incorporado de serie en Windows 10/11).
+
+### 🍎 macOS (Apple Silicon M1/M2/M3 & Intel)
+- **Imagen de disco (`.dmg`):** Arrastra y suelta EnigmaOS en tu carpeta `/Applications`.
+- **Integración con Espacios:** Compatible de forma nativa con `NSWindowCollectionBehaviorCanJoinAllSpaces` para permanecer visible en todos los escritorios virtuales de Mission Control.
+
+### 🐧 Linux (Wayland & X11)
 Puedes instalar EnigmaOS en cualquier distribución Linux (Ubuntu, Debian, Arch Linux, Fedora, Manjaro, openSUSE, Pop!_OS) ejecutando en tu terminal:
 
 ```bash
@@ -278,43 +292,89 @@ enigmaos --enigma-prompt "¿Qué tareas tengo pendientes hoy?"
 
 ## 🛠️ Compilación Manual desde el Código Fuente
 
-Si prefieres compilar el proyecto manualmente desde el código fuente:
+Si prefieres compilar el proyecto manualmente o contribuir al desarrollo:
 
 ### 1. Clonar el Repositorio
 ```bash
-git clone https://github.com/mortalpirata107/EnigmaOS.git
-cd EnigmaOS
+git clone https://github.com/mortalpirata107/EnigmaWindows.git
+cd EnigmaWindows
 ```
 
-### 2. Ejecutar el Instalador Automático
-```bash
-./install.sh
-```
+### 2. Dependencias Previas
 
-O paso a paso de forma manual:
-```bash
-# Instalar dependencias de frontend y compilar
+- **Node.js:** v18+ o v20+ con `npm`.
+- **Rust & Cargo:** Versión estable (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`).
+- **Por Sistema Operativo:**
+  - **Windows:** Visual Studio 2022 con carga de trabajo *Desarrollo para el escritorio con C++* (MSVC) y WebView2 Runtime.
+  - **macOS:** Xcode Command Line Tools (`xcode-select --install`).
+  - **Linux:** Paquetes nativos de desarrollo (`libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `libcairo2-dev`, `libgtk-layer-shell-dev`, `libwayland-dev`, etc.).
+
+---
+
+### 3. Compilación y Ejecución
+
+#### 🪟 En Windows:
+```powershell
+# Instalar dependencias web y compilar frontend
 npm install
 npm run build
 
-# Compilar binario nativo de Rust con optimizaciones release
-cargo build --release --manifest-path src-tauri/Cargo.toml
+# Modo desarrollo interactivo (hot reload):
+npx tauri dev
 
-# Copiar binario y launcher
-mkdir -p ~/.local/bin
-cp src-tauri/target/release/enigmaos ~/.local/bin/enigmaos
-cp enigmaos-launcher.sh ~/.local/bin/enigmaos-launcher
-chmod +x ~/.local/bin/enigmaos ~/.local/bin/enigmaos-launcher
+# Compilar ejecutable optimizado release (.exe e instalador .msi):
+npx tauri build
 ```
+
+#### 🍎 En macOS:
+```bash
+# Instalar dependencias web y compilar frontend
+npm install
+npm run build
+
+# Modo desarrollo interactivo:
+npx tauri dev
+
+# Compilar paquete .dmg y .app (Universal / Apple Silicon):
+npx tauri build
+```
+
+#### 🐧 En Linux:
+```bash
+# Instalador automático directo:
+./install.sh
+
+# O compilación manual:
+npm install
+npm run build
+cargo build --release --manifest-path src-tauri/Cargo.toml
+```
+
+---
+
+## 📂 Rutas de Configuración del Sistema Multiplataforma
+
+EnigmaOS almacena de forma aislada y segura su base de datos SQLite y las configuraciones de IA en los directorios estándar de cada sistema operativo:
+
+| Sistema Operativo | Archivo de Modelos (`models.json`) | Base de Datos SQLite y Datos |
+| :--- | :--- | :--- |
+| **Windows** | `%APPDATA%\enigmaos\models.json` | `%LOCALAPPDATA%\enigmaos\enigma.db` |
+| **macOS** | `~/Library/Application Support/enigmaos/models.json` | `~/Library/Application Support/enigmaos/enigma.db` |
+| **Linux** | `~/.config/enigmaos/models.json` | `~/.local/share/enigmaos/enigma.db` |
 
 ---
 
 ## 🚀 Inicio Automático con la Sesión
 
-Para que EnigmaOS se inicie automáticamente al encender tu PC o iniciar sesión en tu entorno de escritorio:
+### En Windows:
+Crea un acceso directo del ejecutable `EnigmaOS.exe` en tu carpeta de inicio:
+`Win + R` -> `shell:startup` y pega el acceso directo allí.
 
+### En macOS:
+Añade EnigmaOS en **Ajustes del Sistema** > **General** > **Ítems de inicio de sesión**.
+
+### En Linux:
 Crea o verifica el archivo `~/.config/autostart/enigmaos.desktop`:
-
 ```ini
 [Desktop Entry]
 Type=Application
@@ -323,7 +383,7 @@ Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
 Name=EnigmaOS
-Comment=EnigmaOS AI Desktop Shell para Linux
+Comment=EnigmaOS AI Desktop Shell
 ```
 
 ---

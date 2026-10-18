@@ -54,7 +54,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "appimage"],
+    "targets": "all",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -64,6 +64,6 @@
     ],
     "category": "Utility",
     "shortDescription": "EnigmaOS Desktop Shell",
-    "longDescription": "EnigmaOS - AI-Powered Desktop Shell & Intelligence Layer for Linux"
+    "longDescription": "EnigmaOS - AI-Powered Desktop Shell & Intelligence Layer for Windows, macOS and Linux"
   }
 }

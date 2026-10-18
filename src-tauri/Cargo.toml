@@ -18,17 +18,11 @@ cc = "1.0"
 tauri = { version = "2", features = ["protocol-asset"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-gtk = "0.18"
-gdk = "0.18"
-gdkx11 = "0.18"
-cairo-rs = "0.18"
 sysinfo = "0.30"
-evdev = "0.12"
 tauri-plugin-global-shortcut = "2.4.0"
 reqwest = { version = "0.13.5", features = ["json", "stream", "blocking", "form", "rustls"] }
 futures-util = "0.3.34"
 cpal = "0.15"
-vosk = "0.3"
 tokio = { version = "1", features = ["full"] }
 rusqlite = { version = "0.31", features = ["bundled"] }
 notify-rust = "4.11"
@@ -36,16 +30,43 @@ chrono = { version = "0.4", features = ["serde"] }
 tiny_http = "0.12"
 open = "5"
 url = "2"
-enigo = { version = "0.2", default-features = false, features = ["wayland", "x11rb"] }
 base64 = "0.22"
 teloxide = { version = "0.13", features = ["macros"] }
 dotenvy = "0.15"
-zbus = "5.19.0"
-arboard = { version = "3.6.1", features = ["wayland-data-control"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+dirs = "5"
+
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+gdk = "0.18"
+gdkx11 = "0.18"
+cairo-rs = "0.18"
+evdev = "0.12"
+zbus = "5.19.0"
+arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+enigo = { version = "0.2", default-features = false, features = ["wayland", "x11rb"] }
+vosk = "0.3"
 
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "0.52", features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+    "Win32_Foundation",
+    "Win32_UI_Shell",
+    "Win32_System_ProcessStatus",
+    "Win32_System_Threading"
+] }
+enigo = { version = "0.2", default-features = false }
+arboard = "3.6.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc = "0.2"
+cocoa = "0.25"
+enigo = { version = "0.2", default-features = false }
+arboard = "3.6.1"
 
 [profile.dev]
 incremental = true

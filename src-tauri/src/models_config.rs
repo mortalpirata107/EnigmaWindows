@@ -72,12 +72,9 @@ impl Default for ModelConfig {
     }
 }
 
-/// Resolves config path `~/.config/enigmaos/models.json`
+/// Resolves config path `dirs::config_dir()/enigmaos/models.json`
 pub fn get_models_config_path() -> PathBuf {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-        .unwrap_or_else(|| PathBuf::from("."));
+    let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     base.join("enigmaos").join("models.json")
 }
 

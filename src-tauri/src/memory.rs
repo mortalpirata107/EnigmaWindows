@@ -40,18 +40,9 @@ Tu objetivo principal es asistir, automatizar y potenciar la productividad diari
 /// Identidad Core para retrocompatibilidad
 pub const ENIGMA_SYSTEM_PROMPT: &str = DEFAULT_CORE_MEMORY_TEMPLATE;
 
-/// Obtiene el directorio de configuración del usuario (~/.config)
+/// Obtiene el directorio de configuración del usuario
 fn get_user_config_dir() -> Option<PathBuf> {
-    if let Ok(cfg) = std::env::var("XDG_CONFIG_HOME") {
-        let p = PathBuf::from(cfg);
-        if !p.as_os_str().is_empty() {
-            return Some(p);
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        return Some(PathBuf::from(home).join(".config"));
-    }
-    None
+    dirs::config_dir()
 }
 
 /// Resuelve la ruta canónica de `enigma_core.md`.

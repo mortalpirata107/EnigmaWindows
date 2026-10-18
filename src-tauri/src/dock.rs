@@ -53,6 +53,34 @@ pub fn launch_app(exec_command: String) -> Result<(), String> {
         return Err("Comando vacío".into());
     }
 
+    #[cfg(target_os = "windows")]
+    let mut child = Command::new("cmd")
+        .args(["/C", &cmd])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| format!("No se pudo lanzar '{}': {}", cmd, e))?;
+
+    #[cfg(target_os = "macos")]
+    let mut child = Command::new("open")
+        .arg(&cmd)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .or_else(|_| {
+            Command::new("sh")
+                .arg("-c")
+                .arg(&cmd)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+        })
+        .map_err(|e| format!("No se pudo lanzar '{}': {}", cmd, e))?;
+
+    #[cfg(target_os = "linux")]
     let mut child = Command::new("sh")
         .arg("-c")
         .arg(&cmd)
@@ -70,13 +98,11 @@ pub fn launch_app(exec_command: String) -> Result<(), String> {
     Ok(())
 }
 
-/// Force-quits an app by its EXACT process name (`killall <name>`, fallback `pkill -x <name>`).
-/// Unlike `pkill -f`, this never matches substrings of other command lines.
-/// Returns `true` if at least one process was signalled, `false` if none had that name.
+/// Force-quits an app by its EXACT process name
 #[tauri::command]
 pub fn force_quit(process_name: String) -> Result<bool, String> {
     let name = process_name.trim();
-    if name.is_empty() || name.contains('/') {
+    if name.is_empty() || name.contains('/') || name.contains('\\') {
         return Err(format!("Nombre de proceso inválido: '{}'", name));
     }
 
@@ -89,22 +115,34 @@ pub fn force_quit(process_name: String) -> Result<bool, String> {
         return Err(format!("'{}' es el propio Dock; cancelado", name));
     }
 
-    let status = match Command::new("killall").arg("-q").arg("--").arg(name).status() {
-        Ok(s) => s,
-        // killall no instalado → pkill con coincidencia exacta del nombre
-        Err(_) => Command::new("pkill")
-            .arg("-x")
-            .arg("--")
-            .arg(name)
+    #[cfg(target_os = "windows")]
+    {
+        let exe_name = if name.ends_with(".exe") { name.to_string() } else { format!("{}.exe", name) };
+        let status = Command::new("taskkill")
+            .args(["/F", "/IM", &exe_name])
             .status()
-            .map_err(|e| format!("No se pudo ejecutar killall/pkill: {}", e))?,
-    };
+            .map_err(|e| format!("No se pudo ejecutar taskkill: {}", e))?;
+        return Ok(status.success());
+    }
 
-    eprintln!("[BottomDock] force_quit '{}' -> {:?}", name, status.code());
-    match status.code() {
-        Some(0) => Ok(true),
-        Some(1) => Ok(false),
-        other => Err(format!("killall terminó con código {:?}", other)),
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = match Command::new("killall").arg("-q").arg("--").arg(name).status() {
+            Ok(s) => s,
+            Err(_) => Command::new("pkill")
+                .arg("-x")
+                .arg("--")
+                .arg(name)
+                .status()
+                .map_err(|e| format!("No se pudo ejecutar killall/pkill: {}", e))?,
+        };
+
+        eprintln!("[BottomDock] force_quit '{}' -> {:?}", name, status.code());
+        match status.code() {
+            Some(0) => Ok(true),
+            Some(1) => Ok(false),
+            other => Err(format!("killall terminó con código {:?}", other)),
+        }
     }
 }
 
@@ -249,9 +287,7 @@ pub fn get_running_apps() -> Vec<RunningApp> {
 }
 
 fn config_path() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     let modern = base.join("enigmaos").join("dock.json");
     if modern.exists() {
         return Some(modern);
@@ -305,9 +341,7 @@ impl Default for VisualSettings {
 }
 
 fn visual_settings_path() -> Option<PathBuf> {
-    let base = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
+    let base = dirs::config_dir().unwrap_or_else(|| PathBuf::from("."));
     let modern = base.join("enigmaos").join("visual_settings.json");
     if modern.exists() {
         return Some(modern);

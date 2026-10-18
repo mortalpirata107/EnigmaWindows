@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use tauri::{AppHandle, Emitter};
+#[cfg(target_os = "linux")]
 use vosk::{DecodingState, Model, Recognizer};
 
 static MANUAL_START_STT: AtomicBool = AtomicBool::new(false);
@@ -22,6 +23,12 @@ pub fn trigger_stop_dictation() {
     MANUAL_STOP_STT.store(true, Ordering::SeqCst);
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn start_wake_word_listener(_app_handle: AppHandle) {
+    eprintln!("[WakeWord] Vosk STT wake-word listener is currently only active on Linux (requires native libvosk binaries).");
+}
+
+#[cfg(target_os = "linux")]
 /// Finds a valid Vosk model directory from candidate locations
 fn find_vosk_model() -> Option<PathBuf> {
     if let Ok(p) = env::var("VOSK_MODEL_PATH") {
@@ -55,6 +62,7 @@ fn find_vosk_model() -> Option<PathBuf> {
     None
 }
 
+#[cfg(target_os = "linux")]
 /// Helper function to check if the recognized text is an exact match for the wake words
 fn check_and_trigger(
     raw_text: &str,
@@ -74,6 +82,7 @@ fn check_and_trigger(
     false
 }
 
+#[cfg(target_os = "linux")]
 enum VoskMode {
     WakeWord,
     Dictation {
@@ -84,6 +93,7 @@ enum VoskMode {
     },
 }
 
+#[cfg(target_os = "linux")]
 /// Spawns the dedicated background thread for wake-word detection using cpal and Vosk
 pub fn start_wake_word_listener(app_handle: AppHandle) {
     thread::Builder::new()
@@ -498,6 +508,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(target_os = "linux")]
     fn test_vosk_model_and_grammar_initialization() {
         let model_path = find_vosk_model().expect("Vosk model must exist at ~/.local/share/vosk/vosk-model-small-es");
         let model = Model::new(model_path.to_str().unwrap()).expect("Vosk model should load successfully");

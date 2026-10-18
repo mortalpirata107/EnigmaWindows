@@ -78,17 +78,11 @@ pub struct ClipboardRecord {
 
 /// Returns the database file path (~/.local/share/enigma/enigma_core.db)
 pub fn get_db_path() -> PathBuf {
-    let mut path = dirs_home().unwrap_or_else(|| PathBuf::from("/tmp"));
-    path.push(".local");
-    path.push("share");
+    let mut path = dirs::data_dir().unwrap_or_else(|| PathBuf::from("."));
     path.push("enigma");
     let _ = fs::create_dir_all(&path);
     path.push("enigma_core.db");
     path
-}
-
-fn dirs_home() -> Option<PathBuf> {
-    std::env::var_os("HOME").map(PathBuf::from)
 }
 
 /// Establishes connection to SQLite

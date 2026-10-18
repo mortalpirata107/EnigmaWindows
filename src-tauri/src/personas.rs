@@ -52,22 +52,11 @@ Eres un virtuoso concertista y maestro pedagogo de piano clásico con formación
   * Ayudas a Santiago a perfeccionar sus obras, resolver pasajes técnicamente difíciles y profundizar en la emoción musical.
 "#;
 
-/// Obtiene el directorio de configuración del usuario (~/.config/enigma/personas)
+/// Obtiene el directorio de configuración del usuario (dirs::config_dir()/enigma/personas)
 pub fn get_user_personas_dir() -> PathBuf {
-    let base = if let Ok(cfg) = std::env::var("XDG_CONFIG_HOME") {
-        let p = PathBuf::from(cfg);
-        if !p.as_os_str().is_empty() {
-            p.join("enigma").join("personas")
-        } else {
-            PathBuf::from("personas")
-        }
-    } else if let Ok(home) = std::env::var("HOME") {
-        PathBuf::from(home).join(".config").join("enigma").join("personas")
-    } else {
-        PathBuf::from("personas")
-    };
-
-    base
+    dirs::config_dir()
+        .map(|p| p.join("enigma").join("personas"))
+        .unwrap_or_else(|| PathBuf::from("personas"))
 }
 
 /// Obtiene el directorio principal donde residen las personas (priorizando config de usuario)
