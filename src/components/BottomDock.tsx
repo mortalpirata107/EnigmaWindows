@@ -48,13 +48,13 @@ export interface RunningApp {
 type PinnedApp = Pick<AppItem, 'id' | 'name' | 'icon' | 'exec'>;
 
 const DEFAULT_PINNED: PinnedApp[] = [
-  { id: 'konsole', name: 'Terminal', icon: 'terminal', exec: 'konsole' },
-  { id: 'opera', name: 'Opera', icon: 'opera', exec: 'opera' },
+  { id: 'terminal', name: 'Terminal', icon: 'terminal', exec: 'powershell' },
+  { id: 'browser', name: 'Navegador Web', icon: 'brave', exec: 'start https://google.com' },
   { id: 'antigravity', name: 'Antigravity IDE', icon: 'antigravity', exec: 'antigravity-ide' },
-  { id: 'dolphin', name: 'Archivos', icon: 'dolphin', exec: 'dolphin' },
+  { id: 'files', name: 'Archivos', icon: 'dolphin', exec: 'explorer' },
   { id: 'discord', name: 'Discord', icon: 'discord', exec: 'discord' },
   { id: 'spotify', name: 'Spotify', icon: 'spotify', exec: 'spotify' },
-  { id: 'systemsettings', name: 'Ajustes', icon: 'settings', exec: 'systemsettings' },
+  { id: 'settings', name: 'Ajustes de Windows', icon: 'settings', exec: 'start ms-settings:' },
 ];
 
 /** Claves para emparejar una app fijada con ventanas abiertas */

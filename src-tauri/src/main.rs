@@ -373,6 +373,7 @@ fn main() {
                 }
                 if let Some(dock_window) = app.get_webview_window("dock") {
                     window_strut::setup_window_for_platform(&dock_window);
+                    window_strut::start_mouse_hit_test_tracker(dock_window.clone());
                     let _ = dock_window.show();
                 }
             }

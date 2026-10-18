@@ -1,17 +1,16 @@
-# 🌌 EnigmaOS (Windows & macOS Edition)
+# 🌌 EnigmaOS (Windows Edition)
 
 <p align="center">
-  <img src="docs/screenshots/topbar_overview.png" alt="EnigmaOS Overview" width="100%" />
+  <img src="docs/screenshots/topbar_overview.png" alt="EnigmaOS Windows Overview" width="100%" />
 </p>
 
 <p align="center">
-  <strong>Entorno de sobrecubierta futurista, Dynamic Island, Dock inteligente y Asistente de IA multimodal para Windows y macOS.</strong>
+  <strong>Entorno de sobrecubierta futurista, Dynamic Island flotante, Dock inteligente y Asistente de IA multimodal para Windows 10 y 11.</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/mortalpirata107/EnigmaWindows/releases"><img src="https://img.shields.io/github/v/release/mortalpirata107/EnigmaWindows?style=for-the-badge&color=red" alt="Release" /></a>
-  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-blue?style=for-the-badge&logo=windows" alt="Windows Support" />
-  <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?style=for-the-badge&logo=apple" alt="macOS Support" />
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Windows Support" />
   <img src="https://img.shields.io/badge/Built%20With-Tauri%20v2-24C8D8?style=for-the-badge&logo=tauri" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/Backend-Rust-DEA584?style=for-the-badge&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/Frontend-React%2019%20%7C%20TypeScript-61DAFB?style=for-the-badge&logo=react" alt="React TypeScript" />
@@ -21,22 +20,16 @@
 
 ---
 
-## ⚡ Descargas Oficiales (Versión Más Reciente)
+## ⚡ Descargas Oficiales para Windows (Versión Más Reciente)
 
-Descarga la última versión de **EnigmaOS** compilada automáticamente y lista para instalar:
+Descarga la última versión de **EnigmaOS** compilada automáticamente y lista para instalar en tu PC:
 
 <div align="center">
 
-### 🪟 Para Windows (10 / 11 de 64 bits)
+### 🪟 Instaladores para Windows 10 y Windows 11 (64 bits)
 
 [![Descargar .exe](https://img.shields.io/badge/Descargar%20Instalador%20.EXE-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64-setup.exe)
 [![Descargar .msi](https://img.shields.io/badge/Descargar%20Paquete%20.MSI-Windows%20x64-005A9E?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64_en-US.msi)
-
----
-
-### 🍎 Para macOS (Apple Silicon M1/M2/M3/M4 & Intel)
-
-[![Descargar .dmg](https://img.shields.io/badge/Descargar%20Imagen%20.DMG-macOS%20Universal-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/mortalpirata107/EnigmaWindows/releases/latest)
 
 ---
 
@@ -48,7 +41,6 @@ Descarga la última versión de **EnigmaOS** compilada automáticamente y lista 
 | :--- | :--- | :--- | :--- |
 | **Windows 10 / 11** | `.exe` (NSIS) | x86_64 (64-bit) | [📥 **Descargar EnigmaOS (.exe)**](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64-setup.exe) |
 | **Windows 10 / 11** | `.msi` (Windows Installer) | x86_64 (64-bit) | [📥 **Descargar EnigmaOS (.msi)**](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64_en-US.msi) |
-| **macOS** | `.dmg` / `.app` | Apple Silicon / Intel | [📥 **Descargar EnigmaOS (.dmg)**](https://github.com/mortalpirata107/EnigmaWindows/releases/latest) |
 
 > [!TIP]
 > **Enlaces Permanentes:** Los enlaces anteriores utilizan `/releases/latest/download/`, lo que garantiza que **siempre descargarán la versión más reciente** publicada en el repositorio sin necesidad de buscar el tag manual.

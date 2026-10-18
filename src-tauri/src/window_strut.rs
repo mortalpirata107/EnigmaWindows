@@ -276,8 +276,19 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
             let size = monitor.size();
             let scale_factor = monitor.scale_factor();
             let logical_w = size.width as f64 / scale_factor;
-            let _ = window.set_size(tauri::LogicalSize::new(logical_w, 900.0));
-            let _ = window.set_position(tauri::LogicalPosition::new(0.0, 0.0));
+            let logical_h = size.height as f64 / scale_factor;
+
+            if window.label() == "dock" {
+                // Dock window: anchored to the BOTTOM of the screen
+                let dock_h = 600.0.min(logical_h - 40.0);
+                let dock_y = logical_h - dock_h;
+                let _ = window.set_size(tauri::LogicalSize::new(logical_w, dock_h));
+                let _ = window.set_position(tauri::LogicalPosition::new(0.0, dock_y));
+            } else {
+                // Main window: anchored to the TOP of the screen
+                let _ = window.set_size(tauri::LogicalSize::new(logical_w, 900.0));
+                let _ = window.set_position(tauri::LogicalPosition::new(0.0, 0.0));
+            }
         }
         // Start in click-through mode until cursor moves into notch/dock
         let _ = window.set_ignore_cursor_events(true);
@@ -329,13 +340,18 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
                     continue;
                 }
 
+                // Window position in physical screen coordinates
+                let win_pos = win.outer_position().unwrap_or(tauri::PhysicalPosition { x: 0, y: 0 });
+                let rel_x = cursor[0] - win_pos.x;
+                let rel_y = cursor[1] - win_pos.y;
+
                 let mut is_inside = false;
                 for r in &regions {
                     let rx = r[0];
                     let ry = r[1];
                     let rw = r[2];
                     let rh = r[3];
-                    if cursor[0] >= rx && cursor[0] <= rx + rw && cursor[1] >= ry && cursor[1] <= ry + rh {
+                    if rel_x >= rx && rel_x <= rx + rw && rel_y >= ry && rel_y <= ry + rh {
                         is_inside = true;
                         break;
                     }

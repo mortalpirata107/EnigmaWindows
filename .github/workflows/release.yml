@@ -1,4 +1,4 @@
-name: 'Release EnigmaOS Windows & macOS'
+name: 'Release EnigmaOS Windows'
 
 on:
   push:
@@ -10,18 +10,7 @@ jobs:
   release:
     permissions:
       contents: write
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: 'windows-latest'
-            target: 'x86_64-pc-windows-msvc'
-            args: ''
-          - platform: 'macos-latest'
-            target: 'aarch64-apple-darwin'
-            args: ''
-
-    runs-on: ${{ matrix.platform }}
+    runs-on: windows-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -35,7 +24,7 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: ${{ matrix.target }}
+          targets: 'x86_64-pc-windows-msvc'
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -54,17 +43,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'EnigmaOS Windows & Mac ${{ github.ref_name }}'
+          releaseName: 'EnigmaOS Windows ${{ github.ref_name }}'
           releaseBody: |
-            ### 🚀 EnigmaOS Windows & macOS Release ${{ github.ref_name }}
+            ### 🚀 EnigmaOS Windows Edition ${{ github.ref_name }}
             
-            Descargas oficiales para Windows y macOS:
-            - **Windows (10 / 11):** 
-              - Instalador NSIS (`.exe`): Asistente de instalación directa.
-              - Instalador MSI (`.msi`): Paquete de instalación para Windows.
-            - **macOS:**
-              - Apple Silicon (M1/M2/M3/M4): Paquete `.dmg` y `.app`.
-              - Intel (x86_64): Paquete `.dmg` y `.app`.
+            Descargas oficiales para Windows 10 y Windows 11 (64-bit):
+            - **Instalador NSIS (`.exe`):** Asistente interactivo de instalación directa.
+            - **Paquete MSI (`.msi`):** Instalador para entornos corporativos y estándar de Windows.
+            
+            ✨ **Novedades de esta versión:**
+            - **Dock Inteligente 100% Operativo:** Corregido anclaje al borde inferior de la pantalla, activación por cursor y apertura fluida en Windows.
+            - **Escritorios Virtuales Nativos:** Soporte para cambiar escritorios en Windows 10 y 11 mediante `Win + Ctrl + Flechas`.
+            - **Islas Flotantes con Margen Superior:** La TopBar cuenta siempre con su margen de flotación (`8px`) y esquinas redondeadas.
+            - **Diseño Reactivo:** Optimizado para cualquier resolución (1024x768, 1280x720, 1080p, 2K/4K) sin colapsos.
+            - **Nuevo Logo Enigma Core:** Escudo hexagonal cibernético con gradiente rubí/carmesí.
           releaseDraft: false
           prerelease: false
-          args: ${{ matrix.args }}
+          args: ''
