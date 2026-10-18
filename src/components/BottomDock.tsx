@@ -73,8 +73,8 @@ function processNameFor(app: Pick<AppItem, 'exec' | 'id' | 'processName'>): stri
   return (app.exec.trim().split(/\s+/)[0] || '').split('/').pop() || app.id;
 }
 
-const IDLE_WIDTH = 100;
-const IDLE_HEIGHT = 10;
+const IDLE_WIDTH = 180;
+const IDLE_HEIGHT = 16;
 const DOCK_HEIGHT = 68;
 const BOTTOM_MARGIN = 12;
 const BOUNCE_DURATION_MS = 1000;
@@ -129,6 +129,38 @@ export const BottomDock: React.FC = () => {
     }).then(u => { unlisten = u; }).catch(() => {});
     return () => { if (unlisten) unlisten(); };
   }, []);
+
+  // Hardware hit-testing: escuchar eventos nativos del cursor emitidos desde Rust
+  useEffect(() => {
+    let unlistenEnter: (() => void) | undefined;
+    let unlistenLeave: (() => void) | undefined;
+
+    listen('window_cursor_entered', () => {
+      if (leaveTimerRef.current) {
+        window.clearTimeout(leaveTimerRef.current);
+        leaveTimerRef.current = null;
+      }
+      isHoveredRef.current = true;
+      setIsHovered(true);
+    }).then(u => { unlistenEnter = u; }).catch(() => {});
+
+    listen('window_cursor_left', () => {
+      if (isLauncherOpenRef.current || contextMenuAppIdRef.current) return;
+      if (leaveTimerRef.current) window.clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = window.setTimeout(() => {
+        if (isLauncherOpenRef.current || contextMenuAppIdRef.current) return;
+        isHoveredRef.current = false;
+        setIsHovered(false);
+        setHoveredAppId(null);
+        mouseX.set(Infinity);
+      }, 220);
+    }).then(u => { unlistenLeave = u; }).catch(() => {});
+
+    return () => {
+      if (unlistenEnter) unlistenEnter();
+      if (unlistenLeave) unlistenLeave();
+    };
+  }, [mouseX]);
 
   // =========================================================================
   // MONITOR DE PROCESOS Y APLICACIONES DINÁMICAS (Rust Backend)
@@ -318,11 +350,12 @@ export const BottomDock: React.FC = () => {
       const launcherOpen = isLauncherOpenRef.current;
       const menuOpen = !!contextMenuAppIdRef.current;
       if (!isHoveredRef.current && !launcherOpen && !menuOpen) {
-        const idleX = centerX - IDLE_WIDTH / 2;
-        const idleY = screenH - BOTTOM_MARGIN - IDLE_HEIGHT;
-        const x = Math.round(idleX * dpr);
-        const y = Math.round(idleY * dpr);
-        const w = Math.round(IDLE_WIDTH * dpr);
+        const triggerW = Math.max(IDLE_WIDTH, 420);
+        const idleX = centerX - triggerW / 2;
+        const idleY = screenH - BOTTOM_MARGIN - IDLE_HEIGHT - 16;
+        const x = Math.max(0, Math.round(idleX * dpr));
+        const y = Math.max(0, Math.round(idleY * dpr));
+        const w = Math.round(triggerW * dpr);
         const h = Math.round((screenH - idleY) * dpr);
         regions = [[x, y, w, h]];
       } else {
@@ -1080,9 +1113,9 @@ export const BottomDock: React.FC = () => {
               exit={{ opacity: 0 }}
               transition={{ duration: 0.12 }}
               onClick={handleMouseEnter}
-              className="w-full h-full flex items-center justify-center cursor-pointer"
+              className="w-full h-full flex items-center justify-center cursor-pointer py-1"
             >
-              <div className="w-14 h-1 neu-led-red rounded-full" />
+              <div className="w-20 h-1.5 neu-led-red rounded-full hover:scale-110 transition-transform duration-200" />
             </motion.div>
           ) : (
             /* Modo Expandido: Command Center Sectorizado */

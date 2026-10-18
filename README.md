@@ -49,10 +49,12 @@ Descarga la última versión de **EnigmaOS** compilada automáticamente y lista 
 
 EnigmaOS utiliza **[Ollama](https://ollama.com/)** para ejecutar Inteligencia Artificial de forma **100% local, privada y sin enviar tus datos a la nube**.
 
-### 1. Instalar Ollama (si no lo tienes aún)
-```bash
-curl -fsSL https://ollama.com/install.sh | sh
+### 1. Instalar Ollama en Windows (si no lo tienes aún)
+Puedes instalarlo en un segundo desde PowerShell con Windows Package Manager (`winget`):
+```powershell
+winget install Ollama.Ollama
 ```
+O descargando el instalador oficial desde **[ollama.com/download/windows](https://ollama.com/download/windows)**.
 
 ---
 

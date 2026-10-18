@@ -280,7 +280,7 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
 
             if window.label() == "dock" {
                 // Dock window: anchored to the BOTTOM of the screen
-                let dock_h = 600.0.min(logical_h - 40.0);
+                let dock_h: f64 = (600.0f64).min(logical_h - 40.0);
                 let dock_y = logical_h - dock_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, dock_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(0.0, dock_y));
@@ -336,6 +336,7 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
                     if was_inside != Some(false) {
                         was_inside = Some(false);
                         let _ = win.set_ignore_cursor_events(true);
+                        let _ = win.emit("window_cursor_left", ());
                     }
                     continue;
                 }
@@ -361,6 +362,11 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
                     was_inside = Some(is_inside);
                     let should_ignore = !is_inside;
                     let _ = win.set_ignore_cursor_events(should_ignore);
+                    if is_inside {
+                        let _ = win.emit("window_cursor_entered", ());
+                    } else {
+                        let _ = win.emit("window_cursor_left", ());
+                    }
                 }
             }
         });
