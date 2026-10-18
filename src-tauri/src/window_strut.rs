@@ -282,12 +282,11 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
         let _ = window.set_ignore_cursor_events(true);
         unsafe {
             if let Ok(ns_win) = window.ns_window() {
-                let ns_win = ns_win as cocoa::base::id;
-                use cocoa::appkit::NSWindow;
-                ns_win.setCollectionBehavior_(
-                    cocoa::appkit::NSWindowCollectionBehavior::NSWindowCollectionBehaviorCanJoinAllSpaces
-                    | cocoa::appkit::NSWindowCollectionBehavior::NSWindowCollectionBehaviorStationary
-                );
+                use objc::{msg_send, sel, sel_impl};
+                use objc::runtime::Object;
+                let window_ptr = ns_win as *mut Object;
+                let behavior: usize = (1 << 0) | (1 << 4);
+                let _: () = msg_send![window_ptr, setCollectionBehavior: behavior];
             }
         }
     }
@@ -506,10 +505,27 @@ pub fn get_cursor_position() -> [i32; 2] {
     }
     #[cfg(target_os = "macos")]
     {
-        use cocoa::appkit::NSEvent;
+        #[link(name = "CoreGraphics", kind = "framework")]
+        extern "C" {
+            fn CGEventCreate(source: *const std::ffi::c_void) -> *mut std::ffi::c_void;
+            fn CGEventGetLocation(event: *mut std::ffi::c_void) -> CGPoint;
+            fn CFRelease(cf: *const std::ffi::c_void);
+        }
+        #[repr(C)]
+        #[derive(Copy, Clone)]
+        struct CGPoint {
+            x: f64,
+            y: f64,
+        }
         unsafe {
-            let loc = NSEvent::mouseLocation(cocoa::base::nil);
-            [loc.x as i32, loc.y as i32]
+            let ev = CGEventCreate(std::ptr::null());
+            if !ev.is_null() {
+                let pt = CGEventGetLocation(ev);
+                CFRelease(ev);
+                [pt.x as i32, pt.y as i32]
+            } else {
+                [0, 0]
+            }
         }
     }
     #[cfg(not(any(target_os = "linux", target_os = "windows", target_os = "macos")))]
