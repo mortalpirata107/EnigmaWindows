@@ -83,10 +83,10 @@ export const TopBarLayout: React.FC = () => {
         style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none', willChange: 'opacity' }} 
       />
 
-      {/* 1. Cápsula Izquierda: Anclada estrictamente a top-0 y left-0 absoluto */}
+      {/* 1. Cápsula Izquierda: Isla flotante anclada con margen superior (top-2 = 8px) y lateral */}
       <div 
-        className="pointer-events-auto absolute top-0 left-0 m-0 p-0"
-        style={{ top: 0, left: 0, margin: 0, padding: 0, willChange: 'transform' }}
+        className="pointer-events-auto absolute top-2 left-3 sm:left-4 m-0 p-0 z-30"
+        style={{ willChange: 'transform' }}
       >
         <LeftCapsule 
           innerRef={leftRef} 
@@ -94,7 +94,7 @@ export const TopBarLayout: React.FC = () => {
         />
       </div>
 
-      {/* 2. Dynamic Notch Central & Enigma Field: Anclada a top-0 en el centro */}
+      {/* 2. Dynamic Notch Central & Enigma Field: Isla flotante centrada */}
       <DynamicNotch 
         innerRef={notchRef} 
         isExpanded={isMediaExpanded}
@@ -103,10 +103,10 @@ export const TopBarLayout: React.FC = () => {
         onSearchOpenChange={setIsSearchOpen}
       />
 
-      {/* 3. Cápsula Derecha: Anclada estrictamente a top-0 y right-0 absoluto */}
+      {/* 3. Cápsula Derecha: Isla flotante anclada con margen superior (top-2 = 8px) y lateral */}
       <div 
-        className="pointer-events-auto absolute top-0 right-0 m-0 p-0"
-        style={{ top: 0, right: 0, margin: 0, padding: 0, willChange: 'transform' }}
+        className="pointer-events-auto absolute top-2 right-3 sm:right-4 m-0 p-0 z-30"
+        style={{ willChange: 'transform' }}
       >
         <RightCapsule 
           innerRef={rightRef}

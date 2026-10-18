@@ -4,7 +4,6 @@ import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { MediaExpanded, type NotchSection } from './MediaExpanded';
 import { NotchSearch } from './NotchSearch';
-import { NotchTopLeftEar, NotchTopRightEar } from './NotchEars';
 import { syncAllTopBarRegions } from '../utils/syncInputRegions';
 import { EnigmaHub } from './EnigmaHub';
 import { PersonaSelector, getPersonaMetadata } from './PersonaSelector';
@@ -1117,7 +1116,10 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
     if (searchOpen) return 560;
     if (isExpanded) return 520;
     if (isSpotifyPlaying) return 340;
-    return 280;
+    if (typeof window !== 'undefined' && window.innerWidth < 1200) {
+      return 210;
+    }
+    return 270;
   };
 
   // Detección de estado expandido para sintonía dinámica del resorte
@@ -1153,13 +1155,13 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
         ref={forcefieldRef}
         id="enigma-forcefield-container"
         onMouseLeave={handleForcefieldMouseLeave}
-        className={`absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto select-none m-0 z-40 ${enigmaState === 'active' ? 'gap-2.5 pb-6' : 'gap-0 pb-0'
+        className={`absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto select-none m-0 z-40 ${enigmaState === 'active' ? 'gap-2.5 pb-6' : 'gap-0 pb-0'
           }`}
-        style={{ top: 0, margin: 0 }}
+        style={{ top: 8, margin: 0 }}
       >
         {/* =========================================================================
           2.A. EL NOTCH (ARRIBA):
-          - Mantiene su diseño de píldora de cristal oscuro.
+          - Mantiene su diseño de píldora de cristal oscuro flotante.
           - Orbe WebGL central acelerado por GPU (VoiceOrb) en rojo carmesí #b82a2a
           ========================================================================= */}
         <motion.div
@@ -1187,8 +1189,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
             opacity: 1,
             width: getNotchWidth(),
             height: getNotchHeight(),
-            borderBottomLeftRadius: notchBorderRadius,
-            borderBottomRightRadius: notchBorderRadius,
+            borderRadius: notchBorderRadius,
             ...(enigmaState === 'corrupting'
               ? {
                 x: [-3, 3, -3, 2, -1, 1, 0],
@@ -1216,46 +1217,18 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
               }
               : notchSpringTransition
           }
-          style={{ top: 0, margin: 0, minWidth: 280, minHeight: 34, willChange: 'width, height, transform, opacity', transform: 'translateZ(0)' }}
-          className={`relative z-30 pointer-events-auto select-none will-change-[width,height] neu-chassis ${enigmaState === 'corrupting'
+          style={{ margin: 0, minHeight: 34, willChange: 'width, height, transform, opacity', transform: 'translateZ(0)' }}
+          className={`relative z-30 pointer-events-auto select-none will-change-[width,height] neu-chassis rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-red-950/40 ${enigmaState === 'corrupting'
               ? 'border-[#EF4444] shadow-[0_0_25px_rgba(239,68,68,0.8)]'
               : enigmaState === 'active'
                 ? 'border-[#EF4444]/60 shadow-[0_16px_45px_rgba(239,68,68,0.35)]'
                 : ''
             }`}
         >
-          {/* Alas cóncavas suaves que preservan la curvatura original del Notch */}
-          <motion.div
-            animate={{
-              scale: isExpanded || searchOpen ? 1.14 : 1,
-            }}
-            transition={notchSpringTransition}
-            className="absolute top-0 -left-[16px] w-[18px] h-[16px] origin-top-right pointer-events-none select-none z-20"
-          >
-            <NotchTopLeftEar />
-            {isSpotifyPlaying && (
-              <div className="absolute -inset-1 bg-[#b82a2a]/20 blur-sm rounded-full pointer-events-none -z-10 animate-pulse" />
-            )}
-          </motion.div>
-
-          <motion.div
-            animate={{
-              scale: isExpanded || searchOpen ? 1.14 : 1,
-            }}
-            transition={notchSpringTransition}
-            className="absolute top-0 -right-[16px] w-[18px] h-[16px] origin-top-left pointer-events-none select-none z-20"
-          >
-            <NotchTopRightEar />
-            {isSpotifyPlaying && (
-              <div className="absolute -inset-1 bg-[#b82a2a]/20 blur-sm rounded-full pointer-events-none -z-10 animate-pulse" />
-            )}
-          </motion.div>
-
           {/* Contenedor de Contenido Interno del Notch */}
           <motion.div
             animate={{
-              borderBottomLeftRadius: notchBorderRadius,
-              borderBottomRightRadius: notchBorderRadius,
+              borderRadius: notchBorderRadius,
             }}
             transition={notchSpringTransition}
             className="w-full h-full relative overflow-hidden flex items-center justify-center bg-transparent pointer-events-auto"
@@ -1499,18 +1472,18 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
                       title="Haz clic o pulsa Alt + 3 para activar Enigma"
                       className="relative z-10 w-full flex items-center justify-center h-full px-2 py-0.5 cursor-pointer whitespace-nowrap"
                     >
-                      <div className="flex items-center justify-center gap-2 px-3 py-1 rounded-xl neu-inset border border-red-950/40 whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1 rounded-xl neu-inset border border-red-950/40 whitespace-nowrap">
                         <div className="flex items-center font-mono font-bold text-xs text-white tracking-widest font-mono-num whitespace-nowrap">
                           <span>{hours}</span>
                           <span className="text-[#EF4444] mx-0.5 animate-pulse font-bold">:</span>
                           <span>{minutes}</span>
-                          <span className="text-[#EF4444] mx-0.5 animate-pulse font-bold">:</span>
-                          <span>{seconds}</span>
+                          <span className="hidden sm:inline text-[#EF4444] mx-0.5 animate-pulse font-bold">:</span>
+                          <span className="hidden sm:inline">{seconds}</span>
                         </div>
 
-                        <span className="text-[#EF4444] font-bold text-xs leading-none">·</span>
+                        <span className="hidden md:inline text-[#EF4444] font-bold text-xs leading-none">·</span>
 
-                        <span className="font-mono text-xs font-semibold text-white capitalize whitespace-nowrap">
+                        <span className="hidden md:inline font-mono text-xs font-semibold text-white capitalize whitespace-nowrap">
                           {formattedDate}
                         </span>
 

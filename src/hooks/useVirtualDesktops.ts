@@ -46,11 +46,26 @@ export function useVirtualDesktops() {
   }, [fetchDesktops]);
 
   const switchDesktop = useCallback(async (target: string | number) => {
+    const targetIdx = typeof target === 'number' 
+      ? target 
+      : (parseInt(String(target).replace('desktop-', ''), 10) || 0);
+
+    // Optimistic UI update: instant feedback with zero delay
+    setState((prev) => ({
+      ...prev,
+      current_id: target.toString(),
+      current_index: targetIdx,
+      desktops: prev.desktops.map((d) => ({
+        ...d,
+        is_current: d.index === targetIdx || d.id === target.toString() || d.id === `desktop-${targetIdx}`,
+      })),
+    }));
+
     try {
       const newState = await invoke<DesktopsState>('switch_virtual_desktop', {
         target: target.toString(),
       });
-      if (newState) {
+      if (newState && newState.desktops && newState.desktops.length > 0) {
         setState(newState);
       }
     } catch (err) {

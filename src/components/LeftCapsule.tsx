@@ -4,11 +4,9 @@ import {
   Terminal, 
   Globe, 
   Folder, 
-  Code, 
-  Search 
+  Code 
 } from 'lucide-react';
 import { invoke } from '@tauri-apps/api/core';
-import { CapsuleRightEndCap } from './NotchEars';
 import { useVirtualDesktops, VirtualDesktopItem } from '../hooks/useVirtualDesktops';
 
 interface LeftCapsuleProps {
@@ -30,13 +28,13 @@ export const LeftCapsule: React.FC<LeftCapsuleProps> = ({
   };
 
   const appShortcuts = [
-    { id: 'term', name: 'Alacritty', icon: Terminal, cmd: 'alacritty' },
-    { id: 'web', name: 'Brave Browser', icon: Globe, cmd: 'brave' },
-    { id: 'files', name: 'Dolphin', icon: Folder, cmd: 'dolphin' },
+    { id: 'term', name: 'Terminal (PowerShell / WT)', icon: Terminal, cmd: 'powershell' },
+    { id: 'web', name: 'Navegador Web', icon: Globe, cmd: 'brave' },
+    { id: 'files', name: 'Explorador de Archivos', icon: Folder, cmd: 'explorer' },
     { id: 'code', name: 'VS Code', icon: Code, cmd: 'code' },
   ];
 
-  // Desktops fallback seguro en caso de que KWin tarde en reportar
+  // Desktops fallback seguro en caso de que el sistema tarde en reportar
   const safeDesktops: VirtualDesktopItem[] = desktops && desktops.length > 0 
     ? desktops 
     : [
@@ -54,64 +52,74 @@ export const LeftCapsule: React.FC<LeftCapsuleProps> = ({
       animate={{ opacity: [1, 0.999, 1] }}
       transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
       className="flex items-center h-[34px] pointer-events-auto select-none m-0 p-0"
-      style={{ top: 0, margin: 0, padding: 0, willChange: 'opacity, transform', transform: 'translateZ(0)' }}
+      style={{ willChange: 'opacity, transform', transform: 'translateZ(0)' }}
     >
-      {/* 1. Contenedor Físico Principal: Chasis con bordes definidos y micro-relieve afilado */}
+      {/* 1. Contenedor Físico Principal: Isla Flotante con bordes redondeados y micro-relieve afilado */}
       <div
-        className="flex items-center h-[34px] text-white select-none pl-3.5 pr-3 neu-chassis border-l-0 rounded-r-2xl"
+        className="flex items-center h-[34px] text-white select-none px-3.5 neu-chassis rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-red-950/40"
       >
-        <div className="flex items-center gap-2.5 h-full">
-          {/* 1. Botón EOS: Micro-relieve limpio con icono rojo y texto blanco */}
+        <div className="flex items-center gap-2 sm:gap-2.5 h-full">
+          {/* 1. Botón Enigma: Micro-relieve limpio con logo Enigma Core y texto blanco */}
           <motion.button
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.94 }}
             onClick={onOpenSearch}
-            className="h-7 flex items-center gap-1.5 px-2.5 rounded-xl whitespace-nowrap bg-[#111116] border border-white/5 hover:border-[#EF4444]/30 shadow-[1px_1px_3px_#000,inset_0_1px_0_rgba(255,255,255,0.06)] text-white cursor-pointer active:scale-95 transition-all"
-            title="Menú del Sistema EndeavourOS / Búsqueda (Alt + Espacio)"
+            className="h-7 flex items-center gap-1.5 px-2.5 rounded-xl whitespace-nowrap bg-[#111116] border border-white/5 hover:border-[#EF4444]/40 shadow-[1px_1px_3px_#000,inset_0_1px_0_rgba(255,255,255,0.06)] text-white cursor-pointer active:scale-95 transition-all"
+            title="Enigma Core / Búsqueda y Lanzador (Alt + Espacio)"
           >
             <motion.div
               animate={{ 
-                scale: [1, 1.06, 1],
+                scale: [1, 1.08, 1],
                 filter: [
                   'drop-shadow(0 0 3px rgba(239,68,68,0.7))',
-                  'drop-shadow(0 0 6px rgba(239,68,68,0.95))',
+                  'drop-shadow(0 0 7px rgba(239,68,68,0.95))',
                   'drop-shadow(0 0 3px rgba(239,68,68,0.7))'
                 ]
               }}
-              transition={{ duration: 3.5, repeat: Infinity, ease: 'easeInOut' }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
               className="flex items-center justify-center shrink-0"
             >
               <svg
-                className="w-3.5 h-3.5"
-                viewBox="0 0 100 100"
+                className="w-4 h-4"
+                viewBox="0 0 24 24"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <path
-                  d="M50 12 L84 84 C84 84 62 72 50 78 C38 72 16 84 16 84 Z"
-                  fill="url(#eosCrimsonLogo)"
+                  d="M12 2L21 7.2V16.8L12 22L3 16.8V7.2L12 2Z"
+                  stroke="url(#enigmaRedGrad)"
+                  strokeWidth="2"
+                  fill="#140608"
                 />
-                <path d="M50 12 L70 80 C70 80 57 74 50 78 Z" fill="#EF4444" opacity="0.95" />
-                <path d="M50 12 L30 80 C30 80 43 74 50 78 Z" fill="#DC2626" opacity="0.95" />
+                <path
+                  d="M9 8.5H15M9 12H13.5M9 15.5H15M9 8.5V15.5"
+                  stroke="#FF4D4D"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="15" cy="8.5" r="1" fill="#FFF" />
+                <circle cx="13.5" cy="12" r="1" fill="#FFF" />
+                <circle cx="15" cy="15.5" r="1" fill="#FFF" />
                 <defs>
-                  <linearGradient id="eosCrimsonLogo" x1="16" y1="12" x2="84" y2="84" gradientUnits="userSpaceOnUse">
-                    <stop stopColor="#7F1D1D" />
+                  <linearGradient id="enigmaRedGrad" x1="3" y1="2" x2="21" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#EF4444" />
                     <stop offset="0.5" stopColor="#DC2626" />
-                    <stop offset="1" stopColor="#EF4444" />
+                    <stop offset="1" stopColor="#7F1D1D" />
                   </linearGradient>
                 </defs>
               </svg>
             </motion.div>
 
             <span className="font-mono text-xs font-bold tracking-widest text-white">
-              EOS
+              ENIGMA
             </span>
           </motion.button>
 
           {/* Separador vertical tallado */}
           <div className="w-[1.5px] h-3.5 bg-red-950/80 shadow-[1px_0_0_rgba(255,255,255,0.05),0_0_6px_rgba(239,68,68,0.4)] rounded-full" />
 
-          {/* 2. Indicador de Workspace: Píldora uniforme h-7 con micro-cavidad interior */}
+          {/* 2. Indicador de Escritorios Virtuales: Píldora uniforme h-7 con micro-cavidad interior */}
           <div className="h-7 flex items-center gap-1 px-1.5 rounded-full bg-[#08080C] border border-white/5 shadow-[inset_1px_1px_3px_#000,0_1px_0_rgba(255,255,255,0.04)] whitespace-nowrap">
             {safeDesktops.map((ws: VirtualDesktopItem) => {
               const isActive = ws.is_current;
@@ -127,10 +135,10 @@ export const LeftCapsule: React.FC<LeftCapsuleProps> = ({
                   whileTap={{ scale: 0.94 }}
                   className={`relative px-2 py-0.5 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
                     isActive
-                      ? 'bg-[#181822] text-white border border-[#EF4444]/60 shadow-[0_0_8px_rgba(239,68,68,0.3)]'
+                      ? 'bg-[#181822] text-white border border-[#EF4444]/60 shadow-[0_0_8px_rgba(239,68,68,0.4)]'
                       : 'text-white/60 hover:text-white px-1.5'
                   }`}
-                  title={`Cambiar a Escritorio Virtual ${label} (KWin)`}
+                  title={`Cambiar a Escritorio Virtual ${label}`}
                 >
                   {label}
                 </motion.button>
@@ -138,11 +146,11 @@ export const LeftCapsule: React.FC<LeftCapsuleProps> = ({
             })}
           </div>
 
-          {/* Separador vertical tallado */}
-          <div className="w-[1.5px] h-3.5 bg-red-950/80 shadow-[1px_0_0_rgba(255,255,255,0.05),0_0_6px_rgba(239,68,68,0.4)] rounded-full" />
+          {/* Separador vertical tallado (responsivo: visible en pantallas >= 1100px) */}
+          <div className="hidden xl:block w-[1.5px] h-3.5 bg-red-950/80 shadow-[1px_0_0_rgba(255,255,255,0.05),0_0_6px_rgba(239,68,68,0.4)] rounded-full" />
 
-          {/* 3. 4 Botones circulares de acceso rápido: Micro-relieve sutil y nítido */}
-          <div className="flex items-center gap-1.5">
+          {/* 3. Botones de acceso rápido a aplicaciones (responsivo: visible en pantallas amplias) */}
+          <div className="hidden xl:flex items-center gap-1.5">
             {appShortcuts.map((app) => {
               const Icon = app.icon;
               return (
@@ -159,28 +167,10 @@ export const LeftCapsule: React.FC<LeftCapsuleProps> = ({
               );
             })}
           </div>
-
-          {/* Separador vertical tallado */}
-          <div className="w-[1.5px] h-3.5 bg-red-950/80 shadow-[1px_0_0_rgba(255,255,255,0.05),0_0_6px_rgba(239,68,68,0.4)] rounded-full" />
-
-          {/* 4. Píldora 🔍 Búsqueda: Ranura tallada limpia a altura uniforme h-7 */}
-          <motion.button
-            whileHover={{ scale: 1.04 }}
-            whileTap={{ scale: 0.96 }}
-            onClick={onOpenSearch}
-            className="h-7 flex items-center gap-1.5 px-3 rounded-full bg-[#08080C] border border-white/5 hover:border-[#EF4444]/30 shadow-[inset_1px_1px_3px_#000,0_1px_0_rgba(255,255,255,0.04)] text-white hover:text-white whitespace-nowrap transition-all cursor-pointer"
-            title="Búsqueda rápida y lanzador (Alt + Espacio)"
-          >
-            <Search className="w-3 h-3 text-[#EF4444]" />
-            <span className="font-mono text-xs font-semibold tracking-wide text-white whitespace-nowrap">
-              Búsqueda
-            </span>
-          </motion.button>
         </div>
       </div>
-
-      {/* 2. Ala/Curva derecha (S-Curve) perfectamente integrada */}
-      <CapsuleRightEndCap className="-ml-[1px]" />
     </motion.div>
   );
 };
+
+export default LeftCapsule;

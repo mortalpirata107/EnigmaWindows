@@ -13,7 +13,6 @@ import {
   Battery,
   Globe
 } from 'lucide-react';
-import { CapsuleLeftEndCap } from './NotchEars';
 import { useAudioControl } from '../hooks/useAudioControl';
 import { useDetailedBluetooth } from '../hooks/useDetailedBluetooth';
 import { useDetailedNetwork } from '../hooks/useDetailedNetwork';
@@ -216,13 +215,10 @@ export const RightStatusCapsule: React.FC<RightStatusCapsuleProps> = ({
       data-input-region="true"
       onMouseLeave={handleMouseLeave}
       className="relative flex items-start justify-end pointer-events-auto select-none overflow-visible min-h-[34px] m-0 p-0"
-      style={{ top: 0, margin: 0, padding: 0 }}
+      style={{ willChange: 'transform' }}
     >
-      {/* 1. Ala/Curva izquierda (S-Curve) */}
-      <CapsuleLeftEndCap className="-mr-[1px] mt-0 shrink-0 z-10" />
-
-      {/* 2. Contenedor Físico limpio y afilado con bordes definidos */}
-      <div className="relative overflow-visible neu-chassis border-r-0 rounded-l-2xl pl-3 pr-3.5 py-0.5">
+      {/* Contenedor Físico: Isla Flotante con bordes redondeados completos */}
+      <div className="relative overflow-visible neu-chassis rounded-2xl px-3.5 py-0.5 shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-red-950/40">
         {/* =========================================================================
             ORDEN EXACTO EXIGIDO:
             Wifi - microfono - bluetooth - notificaciones | volumen - bateria

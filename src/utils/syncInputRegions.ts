@@ -16,23 +16,25 @@ export function getTopBarRegions(): [number, number, number, number][] {
     return [[0, 0, Math.round(screenW * dpr), Math.round(1150 * dpr)]];
   }
 
-  // 1. Left Capsule (strictly anchored at top: 0, left: 0)
+  // 1. Left Capsule (floating island)
   const leftEl = document.getElementById('left-capsule');
   if (leftEl) {
     const r = leftEl.getBoundingClientRect();
-    const w = Math.max(320, r.width > 50 ? r.width : 320);
-    const h = 34;
+    const x = Math.max(0, r.left);
+    const y = Math.max(0, r.top);
+    const w = r.width > 50 ? r.width : 280;
+    const h = r.height > 20 ? r.height : 36;
     regions.push([
-      0,
-      0,
+      q(x * dpr),
+      q(y * dpr),
       q(w * dpr),
       q(h * dpr),
     ]);
   } else {
-    regions.push([0, 0, q(320 * dpr), q(34 * dpr)]);
+    regions.push([q(12 * dpr), q(8 * dpr), q(280 * dpr), q(36 * dpr)]);
   }
 
-  // 2. Center Dynamic Notch and Enigma Forcefield Container (strictly anchored at top: 0)
+  // 2. Center Dynamic Notch and Enigma Forcefield Container (floating dynamic island)
   const notchEl = document.getElementById('dynamic-notch');
   const enigmaInput = document.getElementById('enigma-input-capsule');
   const enigmaOutput = document.getElementById('enigma-output-panel');
@@ -46,9 +48,10 @@ export function getTopBarRegions(): [number, number, number, number][] {
       const w = Math.max(360, r.width > 50 ? r.width : 360);
       const h = Math.max(500, r.height > 50 ? r.height : 500);
       const left = r.width > 50 ? r.left : (centerX - w / 2);
+      const top = Math.max(0, r.top);
       regions.push([
         Math.max(0, q(left * dpr)),
-        0,
+        q(top * dpr),
         q(w * dpr),
         q(h * dpr),
       ]);
@@ -58,6 +61,7 @@ export function getTopBarRegions(): [number, number, number, number][] {
     const isSearch = notchEl.dataset.search === 'true';
     const section = notchEl.dataset.section;
     const r = notchEl.getBoundingClientRect();
+    const top = Math.max(0, r.top);
 
     const isClipboard = notchEl.dataset.clipboard === 'true';
 
@@ -67,7 +71,7 @@ export function getTopBarRegions(): [number, number, number, number][] {
       const left = centerX - targetW / 2;
       regions.push([
         Math.max(0, q(left * dpr)),
-        0,
+        q(top * dpr),
         q(targetW * dpr),
         q(targetH * dpr),
       ]);
@@ -78,36 +82,37 @@ export function getTopBarRegions(): [number, number, number, number][] {
       const left = centerX - targetW / 2;
       regions.push([
         Math.max(0, q(left * dpr)),
-        0,
+        q(top * dpr),
         q(targetW * dpr),
         q(targetH * dpr),
       ]);
     } else {
-      // En reposo: EL NOTCH NUNCA DEBE SER MENOR A 280px x 34px
-      const defaultW = Math.max(280, r.width > 100 ? r.width : 280);
-      const defaultH = 34;
-      const left = r.width > 100 ? r.left : (centerX - defaultW / 2);
+      // En reposo: Notch dinámico flotante
+      const defaultW = Math.max(200, r.width > 50 ? r.width : 240);
+      const defaultH = r.height > 20 ? r.height : 36;
+      const left = r.width > 50 ? r.left : (centerX - defaultW / 2);
       regions.push([
         Math.max(0, q(left * dpr)),
-        0,
+        q(top * dpr),
         q(defaultW * dpr),
         q(defaultH * dpr),
       ]);
     }
   } else {
     regions.push([
-      q((centerX - 130) * dpr),
-      0,
-      q(260 * dpr),
-      q(34 * dpr),
+      q((centerX - 120) * dpr),
+      q(8 * dpr),
+      q(240 * dpr),
+      q(36 * dpr),
     ]);
   }
 
-  // 3. Right Status Capsule (strictly anchored at top: 0)
+  // 3. Right Status Capsule (floating island)
   const rightEl = document.getElementById('right-status-capsule');
   if (rightEl) {
     const r = rightEl.getBoundingClientRect();
     const expandedChild = rightEl.querySelector('[data-menu-expanded="true"]');
+    const top = Math.max(0, r.top);
     
     if (expandedChild) {
       const cRect = expandedChild.getBoundingClientRect();
@@ -116,23 +121,23 @@ export function getTopBarRegions(): [number, number, number, number][] {
       const maxY = Math.max(cRect.bottom + 8, 40);
       regions.push([
         q(minX * dpr),
-        0,
+        q(top * dpr),
         q((maxX - minX) * dpr),
         q(maxY * dpr),
       ]);
     } else {
-      // En reposo: estrictamente 34px de alto para NO bloquear clics debajo en ventanas activas
-      const minX = r.width > 50 ? r.left : (screenW - 320);
-      const h = 34;
+      const minX = r.width > 50 ? r.left : (screenW - 280);
+      const w = r.width > 50 ? r.width : 280;
+      const h = r.height > 20 ? r.height : 36;
       regions.push([
         q(minX * dpr),
-        0,
-        q((screenW - minX) * dpr),
+        q(top * dpr),
+        q(w * dpr),
         q(h * dpr),
       ]);
     }
   } else {
-    regions.push([q((screenW - 320) * dpr), 0, q(320 * dpr), q(34 * dpr)]);
+    regions.push([q((screenW - 290) * dpr), q(8 * dpr), q(280 * dpr), q(36 * dpr)]);
   }
 
   return regions;

@@ -31,8 +31,53 @@ pub struct DesktopsState {
     pub desktops: Vec<VirtualDesktopItem>,
 }
 
+use std::sync::atomic::{AtomicU32, Ordering};
+static CURRENT_DESKTOP: AtomicU32 = AtomicU32::new(0);
+
+#[cfg(target_os = "windows")]
+fn simulate_win_desktop_switch(delta: i32) {
+    if delta == 0 {
+        return;
+    }
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        keybd_event, KEYEVENTF_KEYUP, VK_CONTROL, VK_LEFT, VK_LWIN, VK_RIGHT,
+    };
+    let vk_dir = if delta > 0 { VK_RIGHT } else { VK_LEFT };
+    let steps = delta.abs().min(6);
+    for _ in 0..steps {
+        unsafe {
+            keybd_event(VK_LWIN as u8, 0, 0, 0);
+            keybd_event(VK_CONTROL as u8, 0, 0, 0);
+            keybd_event(vk_dir as u8, 0, 0, 0);
+            std::thread::sleep(std::time::Duration::from_millis(20));
+            keybd_event(vk_dir as u8, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(VK_CONTROL as u8, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(VK_LWIN as u8, 0, KEYEVENTF_KEYUP, 0);
+            std::thread::sleep(std::time::Duration::from_millis(35));
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn simulate_mac_desktop_switch(delta: i32) {
+    if delta == 0 {
+        return;
+    }
+    let key_code = if delta > 0 { 124 } else { 123 };
+    let steps = delta.abs().min(6);
+    for _ in 0..steps {
+        let _ = Command::new("osascript")
+            .arg("-e")
+            .arg(format!("tell application \"System Events\" to key code {} using control down", key_code))
+            .status();
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
+#[cfg(target_os = "linux")]
 static QDBUS_BIN: OnceLock<&'static str> = OnceLock::new();
 
+#[cfg(target_os = "linux")]
 fn get_qdbus_bin() -> &'static str {
     *QDBUS_BIN.get_or_init(|| {
         if Command::new("which").arg("qdbus6").output().map(|o| o.status.success()).unwrap_or(false) {
@@ -43,6 +88,7 @@ fn get_qdbus_bin() -> &'static str {
     })
 }
 
+#[cfg(target_os = "linux")]
 fn query_qdbus(args: &[&str]) -> Option<String> {
     let output = Command::new(get_qdbus_bin()).args(args).output().ok()?;
     if output.status.success() {
@@ -54,98 +100,150 @@ fn query_qdbus(args: &[&str]) -> Option<String> {
 
 #[tauri::command]
 pub fn get_virtual_desktops() -> DesktopsState {
-    let current_id = query_qdbus(&[
-        "org.kde.KWin",
-        "/VirtualDesktopManager",
-        "org.kde.KWin.VirtualDesktopManager.current",
-    ])
-    .unwrap_or_default();
+    #[cfg(target_os = "linux")]
+    {
+        let current_id = query_qdbus(&[
+            "org.kde.KWin",
+            "/VirtualDesktopManager",
+            "org.kde.KWin.VirtualDesktopManager.current",
+        ])
+        .unwrap_or_default();
 
-    let literal_out = query_qdbus(&[
-        "--literal",
-        "org.kde.KWin",
-        "/VirtualDesktopManager",
-        "org.kde.KWin.VirtualDesktopManager.desktops",
-    ])
-    .unwrap_or_default();
+        let literal_out = query_qdbus(&[
+            "--literal",
+            "org.kde.KWin",
+            "/VirtualDesktopManager",
+            "org.kde.KWin.VirtualDesktopManager.desktops",
+        ])
+        .unwrap_or_default();
 
-    let mut desktops = Vec::new();
-    let mut current_index = 0;
+        let mut desktops = Vec::new();
+        let mut current_index = 0;
 
-    // Parse literal output like:
-    // [Argument: (uss) 0, "7d26539f-e556-416f-aa61-c5ebb0ffe107", "Escritorio 1"], [Argument: (uss) 1, "0188cb6a-12e1-4d83-a052-49e7a1f5595e", "Escritorio 2"]
-    for part in literal_out.split("[Argument: (uss)") {
-        if part.trim().is_empty() {
-            continue;
-        }
-        let clean = part.split(']').next().unwrap_or("");
-        let tokens: Vec<&str> = clean.split(',').map(|s| s.trim().trim_matches('"')).collect();
-        if tokens.len() >= 3 {
-            let idx = tokens[0].trim().parse::<u32>().unwrap_or(0);
-            let id = tokens[1].trim().to_string();
-            let name = tokens[2].trim().to_string();
-            let is_cur = id == current_id;
-            if is_cur {
-                current_index = idx;
+        for part in literal_out.split("[Argument: (uss)") {
+            if part.trim().is_empty() {
+                continue;
             }
-            desktops.push(VirtualDesktopItem {
-                id,
-                index: idx,
-                name,
-                is_current: is_cur,
-            });
+            let clean = part.split(']').next().unwrap_or("");
+            let tokens: Vec<&str> = clean.split(',').map(|s| s.trim().trim_matches('"')).collect();
+            if tokens.len() >= 3 {
+                let idx = tokens[0].trim().parse::<u32>().unwrap_or(0);
+                let id = tokens[1].trim().to_string();
+                let name = tokens[2].trim().to_string();
+                let is_cur = id == current_id;
+                if is_cur {
+                    current_index = idx;
+                }
+                desktops.push(VirtualDesktopItem {
+                    id,
+                    index: idx,
+                    name,
+                    is_current: is_cur,
+                });
+            }
+        }
+
+        if !desktops.is_empty() {
+            return DesktopsState {
+                current_id,
+                current_index,
+                desktops,
+            };
         }
     }
 
-    if desktops.is_empty() {
-        // Fallback representation if D-Bus returned empty
-        for i in 0..4 {
-            desktops.push(VirtualDesktopItem {
-                id: format!("desktop-{}", i),
-                index: i,
-                name: format!("Escritorio {}", i + 1),
-                is_current: i == 0,
-            });
-        }
+    // Default multiplatform (Windows, macOS, or fallback Linux)
+    let cur_idx = CURRENT_DESKTOP.load(Ordering::SeqCst);
+    let mut desktops = Vec::new();
+    for i in 0..4 {
+        desktops.push(VirtualDesktopItem {
+            id: format!("desktop-{}", i),
+            index: i,
+            name: format!("0{}", i + 1),
+            is_current: i == cur_idx,
+        });
     }
 
     DesktopsState {
-        current_id,
-        current_index,
+        current_id: format!("desktop-{}", cur_idx),
+        current_index: cur_idx,
         desktops,
     }
 }
 
 #[tauri::command]
 pub fn switch_virtual_desktop(target: String) -> Result<DesktopsState, String> {
-    let state = get_virtual_desktops();
-    let target_id = if let Ok(idx) = target.parse::<u32>() {
-        // Match by index (0-based or 1-based)
-        if let Some(d) = state.desktops.iter().find(|d| d.index == idx || d.index + 1 == idx) {
-            d.id.clone()
+    let clean_target = target.trim();
+    let target_idx: Option<u32> = if let Some(stripped) = clean_target.strip_prefix("desktop-") {
+        stripped.parse().ok()
+    } else if let Ok(idx) = clean_target.parse::<u32>() {
+        Some(idx)
+    } else {
+        None
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let next_idx = target_idx.unwrap_or(0).min(3);
+        let cur_idx = CURRENT_DESKTOP.load(Ordering::SeqCst);
+        let delta = next_idx as i32 - cur_idx as i32;
+        CURRENT_DESKTOP.store(next_idx, Ordering::SeqCst);
+        if delta != 0 {
+            std::thread::spawn(move || {
+                simulate_win_desktop_switch(delta);
+            });
+        }
+        return Ok(get_virtual_desktops());
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let next_idx = target_idx.unwrap_or(0).min(3);
+        let cur_idx = CURRENT_DESKTOP.load(Ordering::SeqCst);
+        let delta = next_idx as i32 - cur_idx as i32;
+        CURRENT_DESKTOP.store(next_idx, Ordering::SeqCst);
+        if delta != 0 {
+            std::thread::spawn(move || {
+                simulate_mac_desktop_switch(delta);
+            });
+        }
+        return Ok(get_virtual_desktops());
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let state = get_virtual_desktops();
+        let target_id = if let Some(idx) = target_idx {
+            if let Some(d) = state.desktops.iter().find(|d| d.index == idx || d.index + 1 == idx) {
+                d.id.clone()
+            } else {
+                target.clone()
+            }
         } else {
             target.clone()
+        };
+
+        let qdbus_bin = if Command::new("which").arg("qdbus6").output().map(|o| o.status.success()).unwrap_or(false) {
+            "qdbus6"
+        } else {
+            "qdbus"
+        };
+
+        let _ = Command::new(qdbus_bin)
+            .args([
+                "org.kde.KWin",
+                "/VirtualDesktopManager",
+                "org.kde.KWin.VirtualDesktopManager.current",
+                &target_id,
+            ])
+            .status();
+
+        if let Some(idx) = target_idx {
+            CURRENT_DESKTOP.store(idx, Ordering::SeqCst);
         }
-    } else {
-        target.clone()
-    };
 
-    let qdbus_bin = if Command::new("which").arg("qdbus6").output().map(|o| o.status.success()).unwrap_or(false) {
-        "qdbus6"
-    } else {
-        "qdbus"
-    };
-
-    let _ = Command::new(qdbus_bin)
-        .args([
-            "org.kde.KWin",
-            "/VirtualDesktopManager",
-            "org.kde.KWin.VirtualDesktopManager.current",
-            &target_id,
-        ])
-        .status();
-
-    Ok(get_virtual_desktops())
+        Ok(get_virtual_desktops())
+    }
 }
 
 // =========================================================================

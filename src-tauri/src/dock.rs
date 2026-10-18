@@ -54,13 +54,21 @@ pub fn launch_app(exec_command: String) -> Result<(), String> {
     }
 
     #[cfg(target_os = "windows")]
+    let win_cmd = match cmd.to_lowercase().as_str() {
+        "dolphin" | "nautilus" | "thunar" => "explorer".to_string(),
+        "alacritty" | "kitty" | "konsole" => "powershell".to_string(),
+        "brave" => "start https://google.com".to_string(),
+        _ => cmd.clone(),
+    };
+
+    #[cfg(target_os = "windows")]
     let mut child = Command::new("cmd")
-        .args(["/C", &cmd])
+        .args(["/C", &win_cmd])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|e| format!("No se pudo lanzar '{}': {}", cmd, e))?;
+        .map_err(|e| format!("No se pudo lanzar '{}': {}", win_cmd, e))?;
 
     #[cfg(target_os = "macos")]
     let mut child = Command::new("open")

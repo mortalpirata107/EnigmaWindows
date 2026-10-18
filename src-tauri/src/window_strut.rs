@@ -272,6 +272,13 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
     {
         let _ = window.set_always_on_top(true);
         let _ = window.set_decorations(false);
+        if let Ok(Some(monitor)) = window.current_monitor() {
+            let size = monitor.size();
+            let scale_factor = monitor.scale_factor();
+            let logical_w = size.width as f64 / scale_factor;
+            let _ = window.set_size(tauri::LogicalSize::new(logical_w, 900.0));
+            let _ = window.set_position(tauri::LogicalPosition::new(0.0, 0.0));
+        }
         // Start in click-through mode until cursor moves into notch/dock
         let _ = window.set_ignore_cursor_events(true);
     }
