@@ -1,18 +1,17 @@
-# 🌌 EnigmaOS
+# 🌌 EnigmaOS (Windows & macOS Edition)
 
 <p align="center">
   <img src="docs/screenshots/topbar_overview.png" alt="EnigmaOS Overview" width="100%" />
 </p>
 
 <p align="center">
-  <strong>Entorno de sobrecubierta futurista, Dynamic Island, Dock inteligente y Asistente de IA multimodal para Windows, macOS y Linux.</strong>
+  <strong>Entorno de sobrecubierta futurista, Dynamic Island, Dock inteligente y Asistente de IA multimodal para Windows y macOS.</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/mortalpirata107/EnigmaWindows/releases"><img src="https://img.shields.io/github/v/release/mortalpirata107/EnigmaWindows?style=for-the-badge&color=red" alt="Release" /></a>
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-blue?style=for-the-badge&logo=windows" alt="Windows Support" />
   <img src="https://img.shields.io/badge/macOS-Apple%20Silicon%20%7C%20Intel-black?style=for-the-badge&logo=apple" alt="macOS Support" />
-  <img src="https://img.shields.io/badge/Linux-Wayland%20%7C%20X11-red?style=for-the-badge&logo=linux" alt="Linux Wayland" />
   <img src="https://img.shields.io/badge/Built%20With-Tauri%20v2-24C8D8?style=for-the-badge&logo=tauri" alt="Tauri v2" />
   <img src="https://img.shields.io/badge/Backend-Rust-DEA584?style=for-the-badge&logo=rust" alt="Rust" />
   <img src="https://img.shields.io/badge/Frontend-React%2019%20%7C%20TypeScript-61DAFB?style=for-the-badge&logo=react" alt="React TypeScript" />
@@ -22,32 +21,20 @@
 
 ---
 
-## ⚡ Instalación y Descargas por Plataforma
+## ⚡ Descargas e Instalación
 
-EnigmaOS está disponible de forma nativa para **Windows**, **macOS** y **Linux**:
+Descarga los instaladores listos para usar directamente desde la sección de **[Releases](https://github.com/mortalpirata107/EnigmaWindows/releases)**:
 
 ### 🪟 Windows (10 / 11)
-- **Instalador NSIS (`.exe`):** Asistente gráfico de instalación rápida.
-- **Paquete MSI (`.msi`):** Instalador empresarial para despliegues con políticas de sistema.
-- **Requisitos:** WebView2 Runtime (incorporado de serie en Windows 10/11).
+- **Instalador NSIS (`.exe`):** Ejecutable directo con asistente de instalación paso a paso.
+- **Paquete MSI (`.msi`):** Instalador para entornos empresariales y corporativos.
+- **Características nativas:** Dynamic Island superior siempre visible (`always-on-top`), modo click-through dinámico para no interferir con otras ventanas, enumeración de ventanas abiertas mediante Win32 API (`EnumWindows`) y telemetría de hardware en tiempo real.
+- **Requisito:** WebView2 Runtime (incluido por defecto en Windows 10 y 11).
 
-### 🍎 macOS (Apple Silicon M1/M2/M3 & Intel)
-- **Imagen de disco (`.dmg`):** Arrastra y suelta EnigmaOS en tu carpeta `/Applications`.
-- **Integración con Espacios:** Compatible de forma nativa con `NSWindowCollectionBehaviorCanJoinAllSpaces` para permanecer visible en todos los escritorios virtuales de Mission Control.
-
-### 🐧 Linux (Wayland & X11)
-Puedes instalar EnigmaOS en cualquier distribución Linux (Ubuntu, Debian, Arch Linux, Fedora, Manjaro, openSUSE, Pop!_OS) ejecutando en tu terminal:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mortalpirata107/EnigmaOS/main/install.sh | bash
-```
-
-> [!NOTE]
-> **¿Qué hace el instalador automático?**
-> 1. Detecta tu distribución e instala automáticamente las dependencias nativas del sistema (`webkit2gtk`, `gtk3`, `cairo`, `alsa`, etc.).
-> 2. Configura el binario optimizado `enigmaos` y el lanzador `enigmaos-launcher` en `~/.local/bin/`.
-> 3. Registra el acceso directo `enigmaos.desktop` con iconos oficiales en tu lanzador de aplicaciones (KRunner, GNOME Dash, Rofi, etc.).
-> 4. Genera la plantilla de configuración de modelos de IA en `~/.config/enigmaos/models.json`.
+### 🍎 macOS (Apple Silicon M1/M2/M3/M4 & Intel)
+- **Imagen de disco (`.dmg`):** Abre la imagen y arrastra EnigmaOS a la carpeta `/Applications`.
+- **Paquete de aplicación (`.app`):** Listo para ejecutar.
+- **Integración con Mission Control:** Compatible con todos los escritorios virtuales (`NSWindowCollectionBehaviorCanJoinAllSpaces`), con click-through dinámico cuando el cursor no interactúa con el notch.
 
 ---
 
@@ -339,55 +326,31 @@ npx tauri dev
 npx tauri build
 ```
 
-#### 🐧 En Linux:
-```bash
-# Instalador automático directo:
-./install.sh
-
-# O compilación manual:
-npm install
-npm run build
-cargo build --release --manifest-path src-tauri/Cargo.toml
-```
-
 ---
 
-## 📂 Rutas de Configuración del Sistema Multiplataforma
+## 📂 Rutas de Configuración del Sistema
 
-EnigmaOS almacena de forma aislada y segura su base de datos SQLite y las configuraciones de IA en los directorios estándar de cada sistema operativo:
+EnigmaOS almacena de forma aislada y segura su base de datos SQLite y las configuraciones de IA en los directorios nativos estándar:
 
 | Sistema Operativo | Archivo de Modelos (`models.json`) | Base de Datos SQLite y Datos |
 | :--- | :--- | :--- |
 | **Windows** | `%APPDATA%\enigmaos\models.json` | `%LOCALAPPDATA%\enigmaos\enigma.db` |
 | **macOS** | `~/Library/Application Support/enigmaos/models.json` | `~/Library/Application Support/enigmaos/enigma.db` |
-| **Linux** | `~/.config/enigmaos/models.json` | `~/.local/share/enigmaos/enigma.db` |
 
 ---
 
 ## 🚀 Inicio Automático con la Sesión
 
 ### En Windows:
-Crea un acceso directo del ejecutable `EnigmaOS.exe` en tu carpeta de inicio:
-`Win + R` -> `shell:startup` y pega el acceso directo allí.
+1. Pulsa `Win + R`, escribe `shell:startup` y pulsa Enter.
+2. Crea y pega allí un acceso directo a `EnigmaOS.exe`.
 
 ### En macOS:
-Añade EnigmaOS en **Ajustes del Sistema** > **General** > **Ítems de inicio de sesión**.
-
-### En Linux:
-Crea o verifica el archivo `~/.config/autostart/enigmaos.desktop`:
-```ini
-[Desktop Entry]
-Type=Application
-Exec=enigmaos-launcher
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-Name=EnigmaOS
-Comment=EnigmaOS AI Desktop Shell
-```
+1. Abre **Ajustes del Sistema** > **General** > **Ítems de inicio de sesión**.
+2. Añade `EnigmaOS.app` a la lista de aplicaciones de inicio.
 
 ---
 
 ## 📄 Licencia
 
-Este proyecto está bajo la licencia **MIT**. Desarrollado con pasión para la comunidad de Linux y código abierto.
+Este proyecto está bajo la licencia **MIT**. Desarrollado para Windows y macOS.
