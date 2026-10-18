@@ -21,22 +21,37 @@
 
 ---
 
-## ⚡ Descargas e Instalación
+## ⚡ Descargas Oficiales (Versión Más Reciente)
 
-Descarga los instaladores listos para usar directamente desde la sección de **[Releases](https://github.com/mortalpirata107/EnigmaWindows/releases)**:
+Descarga la última versión de **EnigmaOS** compilada automáticamente y lista para instalar:
 
-### 🪟 Windows (10 / 11)
-- **Instalador NSIS (`.exe`):** Ejecutable directo con asistente de instalación paso a paso.
-- **Paquete MSI (`.msi`):** Instalador para entornos empresariales y corporativos.
-- **Características nativas:** Dynamic Island superior siempre visible (`always-on-top`), modo click-through dinámico para no interferir con otras ventanas, enumeración de ventanas abiertas mediante Win32 API (`EnumWindows`) y telemetría de hardware en tiempo real.
-- **Requisito:** WebView2 Runtime (incluido por defecto en Windows 10 y 11).
+<div align="center">
 
-### 🍎 macOS (Apple Silicon M1/M2/M3/M4 & Intel)
-- **Imagen de disco (`.dmg`):** Abre la imagen y arrastra EnigmaOS a la carpeta `/Applications`.
-- **Paquete de aplicación (`.app`):** Listo para ejecutar.
-- **Integración con Mission Control:** Compatible con todos los escritorios virtuales (`NSWindowCollectionBehaviorCanJoinAllSpaces`), con click-through dinámico cuando el cursor no interactúa con el notch.
+### 🪟 Para Windows (10 / 11 de 64 bits)
+
+[![Descargar .exe](https://img.shields.io/badge/Descargar%20Instalador%20.EXE-Windows%20x64-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64-setup.exe)
+[![Descargar .msi](https://img.shields.io/badge/Descargar%20Paquete%20.MSI-Windows%20x64-005A9E?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64_en-US.msi)
 
 ---
+
+### 🍎 Para macOS (Apple Silicon M1/M2/M3/M4 & Intel)
+
+[![Descargar .dmg](https://img.shields.io/badge/Descargar%20Imagen%20.DMG-macOS%20Universal-000000?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/mortalpirata107/EnigmaWindows/releases/latest)
+
+---
+
+**[👉 Ver todas las versiones y notas de actualización en GitHub Releases](https://github.com/mortalpirata107/EnigmaWindows/releases/latest)**
+
+</div>
+
+| Sistema Operativo | Formato de Archivo | Arquitectura | Enlace de Descarga Directa (Siempre Última Versión) |
+| :--- | :--- | :--- | :--- |
+| **Windows 10 / 11** | `.exe` (NSIS) | x86_64 (64-bit) | [📥 **Descargar EnigmaOS (.exe)**](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64-setup.exe) |
+| **Windows 10 / 11** | `.msi` (Windows Installer) | x86_64 (64-bit) | [📥 **Descargar EnigmaOS (.msi)**](https://github.com/mortalpirata107/EnigmaWindows/releases/latest/download/EnigmaOS_1.0.0_x64_en-US.msi) |
+| **macOS** | `.dmg` / `.app` | Apple Silicon / Intel | [📥 **Descargar EnigmaOS (.dmg)**](https://github.com/mortalpirata107/EnigmaWindows/releases/latest) |
+
+> [!TIP]
+> **Enlaces Permanentes:** Los enlaces anteriores utilizan `/releases/latest/download/`, lo que garantiza que **siempre descargarán la versión más reciente** publicada en el repositorio sin necesidad de buscar el tag manual.
 
 ## 🧠 Guía de Modelos de IA (Ollama)
 
