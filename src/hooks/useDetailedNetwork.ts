@@ -12,16 +12,35 @@ const defaultNetwork: NetworkDetails = {
   wifi_networks: [],
 };
 
+let cachedNetwork: NetworkDetails = defaultNetwork;
+let lastFetchTime = 0;
+let inflightPromise: Promise<NetworkDetails> | null = null;
+
 export function useDetailedNetwork() {
-  const [network, setNetwork] = useState<NetworkDetails>(defaultNetwork);
+  const [network, setNetwork] = useState<NetworkDetails>(cachedNetwork);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const fetchNetwork = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastFetchTime < 4000) {
+      setNetwork(cachedNetwork);
+      return;
+    }
+    if (inflightPromise) {
+      const res = await inflightPromise;
+      setNetwork(res);
+      return;
+    }
     try {
-      const res = await invoke<NetworkDetails>('get_detailed_network_status');
+      inflightPromise = invoke<NetworkDetails>('get_detailed_network_status');
+      const res = await inflightPromise;
+      cachedNetwork = res;
+      lastFetchTime = Date.now();
       setNetwork(res);
     } catch (err) {
       console.warn('[useDetailedNetwork] Error fetching network status:', err);
+    } finally {
+      inflightPromise = null;
     }
   }, []);
 
@@ -52,7 +71,7 @@ export function useDetailedNetwork() {
 
   useEffect(() => {
     fetchNetwork();
-    const interval = setInterval(fetchNetwork, 6000);
+    const interval = setInterval(fetchNetwork, 18000);
     return () => clearInterval(interval);
   }, [fetchNetwork]);
 

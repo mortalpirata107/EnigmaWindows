@@ -253,9 +253,12 @@ pub fn init_speech_worker() {
                         // Reproducción directa desde Rust
                         #[cfg(target_os = "windows")]
                         {
+                            use std::os::windows::process::CommandExt;
                             let escaped = wav_path.replace('\\', "/");
                             let ps_play = format!("(New-Object Media.SoundPlayer '{}').PlaySync();", escaped);
-                            let _ = Command::new("powershell")
+                            let mut cmd = Command::new("powershell");
+                            cmd.creation_flags(0x08000000);
+                            let _ = cmd
                                 .args(["-NoProfile", "-NonInteractive", "-Command", &ps_play])
                                 .status();
                         }
@@ -281,9 +284,12 @@ pub fn init_speech_worker() {
                     } else {
                         #[cfg(target_os = "windows")]
                         {
+                            use std::os::windows::process::CommandExt;
                             let clean_text = trimmed.replace('\'', " ");
                             let ps_cmd = format!("Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak('{}');", clean_text);
-                            let _ = Command::new("powershell")
+                            let mut cmd = Command::new("powershell");
+                            cmd.creation_flags(0x08000000);
+                            let _ = cmd
                                 .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
                                 .status();
                         }

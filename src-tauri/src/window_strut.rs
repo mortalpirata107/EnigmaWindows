@@ -265,6 +265,50 @@ pub fn configure_desktop_window(gtk_window: &gtk::ApplicationWindow) {
     gtk_window.queue_draw();
 }
 
+#[cfg(target_os = "windows")]
+pub fn reserve_topbar_workarea() {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETWORKAREA, SPI_SETWORKAREA, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE,
+    };
+    unsafe {
+        let mut rc: RECT = std::mem::zeroed();
+        if SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut rc as *mut _ as *mut _, 0) != 0 {
+            if rc.top < 38 {
+                rc.top = 38;
+                SystemParametersInfoW(
+                    SPI_SETWORKAREA,
+                    0,
+                    &mut rc as *mut _ as *mut _,
+                    SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
+                );
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+pub fn restore_topbar_workarea() {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        SystemParametersInfoW, SPI_GETWORKAREA, SPI_SETWORKAREA, SPIF_SENDCHANGE, SPIF_UPDATEINIFILE,
+    };
+    unsafe {
+        let mut rc: RECT = std::mem::zeroed();
+        if SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut rc as *mut _ as *mut _, 0) != 0 {
+            if rc.top == 38 {
+                rc.top = 0;
+                SystemParametersInfoW(
+                    SPI_SETWORKAREA,
+                    0,
+                    &mut rc as *mut _ as *mut _,
+                    SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
+                );
+            }
+        }
+    }
+}
+
 /// Configures window for Windows and macOS (always-on-top, click-through, space joining)
 #[allow(dead_code)]
 pub fn setup_window_for_platform(window: &WebviewWindow) {
@@ -272,21 +316,27 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
     {
         let _ = window.set_always_on_top(true);
         let _ = window.set_decorations(false);
-        if let Ok(Some(monitor)) = window.current_monitor() {
-            let size = monitor.size();
-            let scale_factor = monitor.scale_factor();
+        
+        let monitor = window.current_monitor().ok().flatten()
+            .or_else(|| window.primary_monitor().ok().flatten())
+            .or_else(|| window.available_monitors().ok().and_then(|mut m| m.next()));
+
+        if let Some(mon) = monitor {
+            let size = mon.size();
+            let scale_factor = mon.scale_factor();
             let logical_w = size.width as f64 / scale_factor;
             let logical_h = size.height as f64 / scale_factor;
 
             if window.label() == "dock" {
                 // Dock window: anchored to the BOTTOM of the screen
-                let dock_h: f64 = (600.0f64).min(logical_h - 40.0);
+                let dock_h: f64 = (580.0f64).min(logical_h - 40.0);
                 let dock_y = logical_h - dock_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, dock_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(0.0, dock_y));
             } else {
                 // Main window: anchored to the TOP of the screen
-                let _ = window.set_size(tauri::LogicalSize::new(logical_w, 900.0));
+                let main_h: f64 = (500.0f64).min(logical_h - 100.0);
+                let _ = window.set_size(tauri::LogicalSize::new(logical_w, main_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(0.0, 0.0));
             }
         }
@@ -356,6 +406,14 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
                         is_inside = true;
                         break;
                     }
+                }
+
+                // Crosstalk isolation between notch and dock:
+                if label == "dock" && cursor[1] < win_pos.y {
+                    is_inside = false;
+                }
+                if label == "main" && rel_y > 520 {
+                    is_inside = false;
                 }
 
                 if was_inside != Some(is_inside) {

@@ -120,7 +120,14 @@ pub fn start_whatsapp_bridge() {
 
     eprintln!("[WhatsAppBridge] Launching Node.js Baileys microservice from: {:?}", bridge_dir);
 
-    match Command::new("node")
+    let mut cmd = Command::new("node");
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000);
+    }
+
+    match cmd
         .arg("index.js")
         .current_dir(&bridge_dir)
         .stdout(Stdio::null())

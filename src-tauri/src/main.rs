@@ -219,6 +219,14 @@ fn main() {
     memory::init_core_memory();
     personas::init_default_personas();
 
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::System::Diagnostics::Debug::{SetErrorMode, SEM_FAILCRITICALERRORS, SEM_NOGPFAULTERRORBOX};
+        unsafe {
+            SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX);
+        }
+    }
+
     #[cfg(target_os = "linux")]
     {
         if std::env::var("GDK_BACKEND").is_err() {
@@ -377,17 +385,22 @@ fn main() {
                 }
             }
 
+            #[cfg(target_os = "windows")]
+            {
+                window_strut::reserve_topbar_workarea();
+            }
+
             #[cfg(not(target_os = "linux"))]
             {
                 if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
                     window_strut::setup_window_for_platform(&window);
                     window_strut::start_mouse_hit_test_tracker(window.clone());
-                    let _ = window.show();
                 }
                 if let Some(dock_window) = app.get_webview_window("dock") {
+                    let _ = dock_window.show();
                     window_strut::setup_window_for_platform(&dock_window);
                     window_strut::start_mouse_hit_test_tracker(dock_window.clone());
-                    let _ = dock_window.show();
                 }
             }
 
@@ -599,6 +612,8 @@ fn main() {
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
                     eprintln!("[Tauri] ExitRequested/Exit: Apagando puente de WhatsApp y restaurando barra de Windows...");
                     let _ = windows::set_windows_taskbar_visible(true);
+                    #[cfg(target_os = "windows")]
+                    window_strut::restore_topbar_workarea();
                     whatsapp_bridge::stop_whatsapp_bridge();
                 }
                 _ => {}

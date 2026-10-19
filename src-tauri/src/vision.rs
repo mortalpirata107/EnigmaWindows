@@ -101,7 +101,10 @@ fn capture_and_process_screen_inner(mode: &str) -> Result<(String, String), Stri
              $bmp.Dispose();",
             escaped_path
         );
-        let _ = Command::new("powershell")
+        use std::os::windows::process::CommandExt;
+        let mut ps_cmd = Command::new("powershell");
+        ps_cmd.creation_flags(0x08000000);
+        let _ = ps_cmd
             .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
             .status();
 

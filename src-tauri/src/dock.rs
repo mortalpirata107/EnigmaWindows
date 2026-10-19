@@ -62,13 +62,17 @@ pub fn launch_app(exec_command: String) -> Result<(), String> {
     };
 
     #[cfg(target_os = "windows")]
-    let mut child = Command::new("cmd")
-        .args(["/C", &win_cmd])
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| format!("No se pudo lanzar '{}': {}", win_cmd, e))?;
+    let mut child = {
+        use std::os::windows::process::CommandExt;
+        let mut c = Command::new("cmd");
+        c.creation_flags(0x08000000);
+        c.args(["/C", &win_cmd])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .map_err(|e| format!("No se pudo lanzar '{}': {}", win_cmd, e))?
+    };
 
     #[cfg(target_os = "macos")]
     let mut child = Command::new("open")

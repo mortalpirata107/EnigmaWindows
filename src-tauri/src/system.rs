@@ -42,18 +42,19 @@ fn simulate_win_desktop_switch(delta: i32) {
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
         keybd_event, KEYEVENTF_KEYUP, VK_CONTROL, VK_LEFT, VK_LWIN, VK_RIGHT,
     };
+    const KEYEVENTF_EXTENDEDKEY: u32 = 0x0001;
     let vk_dir = if delta > 0 { VK_RIGHT } else { VK_LEFT };
     let steps = delta.abs().min(6);
     for _ in 0..steps {
         unsafe {
-            keybd_event(VK_LWIN as u8, 0, 0, 0);
+            keybd_event(VK_LWIN as u8, 0, KEYEVENTF_EXTENDEDKEY, 0);
             keybd_event(VK_CONTROL as u8, 0, 0, 0);
-            keybd_event(vk_dir as u8, 0, 0, 0);
-            std::thread::sleep(std::time::Duration::from_millis(20));
-            keybd_event(vk_dir as u8, 0, KEYEVENTF_KEYUP, 0);
+            keybd_event(vk_dir as u8, 0, KEYEVENTF_EXTENDEDKEY, 0);
+            std::thread::sleep(std::time::Duration::from_millis(25));
+            keybd_event(vk_dir as u8, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0);
             keybd_event(VK_CONTROL as u8, 0, KEYEVENTF_KEYUP, 0);
-            keybd_event(VK_LWIN as u8, 0, KEYEVENTF_KEYUP, 0);
-            std::thread::sleep(std::time::Duration::from_millis(35));
+            keybd_event(VK_LWIN as u8, 0, KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP, 0);
+            std::thread::sleep(std::time::Duration::from_millis(45));
         }
     }
 }
@@ -457,36 +458,22 @@ pub fn get_system_telemetry() -> TelemetryData {
         }
     }
 
-    // Wi-Fi SSID
+    // Wi-Fi / Red (Pure sysinfo memory query - zero CLI subprocesses in 1s poller)
     #[cfg(target_os = "windows")]
     let (wifi_ssid, wifi_enabled) = {
-        let out = Command::new("netsh")
-            .args(["wlan", "show", "interfaces"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
-        let mut ssid = "Wi-Fi".to_string();
-        let mut connected = false;
-        for line in out.lines() {
-            let trimmed = line.trim();
-            if trimmed.starts_with("Estado") || trimmed.starts_with("State") {
-                if trimmed.to_lowercase().contains("conectado") || trimmed.to_lowercase().contains("connected") {
-                    connected = true;
-                }
-            } else if trimmed.starts_with("SSID") && !trimmed.starts_with("SSID de BSSID") {
-                if let Some(pos) = trimmed.find(':') {
-                    let s = trimmed[pos + 1..].trim().to_string();
-                    if !s.is_empty() {
-                        ssid = s;
-                    }
-                }
+        use sysinfo::Networks;
+        let networks = Networks::new_with_refreshed_list();
+        let mut primary_name = "Red de Windows".to_string();
+        let mut has_active = false;
+        for (name, data) in networks.iter() {
+            let n = name.to_lowercase();
+            if !n.contains("loopback") && (data.total_transmitted() > 0 || data.total_received() > 0) {
+                primary_name = name.clone();
+                has_active = true;
+                break;
             }
         }
-        if connected {
-            (ssid, true)
-        } else {
-            ("Conexión del Sistema".to_string(), true)
-        }
+        (primary_name, has_active || !networks.is_empty())
     };
 
     #[cfg(not(target_os = "windows"))]
@@ -1441,18 +1428,28 @@ pub fn launch_system_app(desktop_id: String, exec: String) -> Result<bool, Strin
 pub fn execute_system_action(action: String) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
         match action.as_str() {
             "poweroff" | "shutdown" | "apagar" => {
-                let _ = Command::new("shutdown").args(["/s", "/t", "0"]).spawn();
+                let mut cmd = Command::new("shutdown");
+                cmd.creation_flags(CREATE_NO_WINDOW);
+                let _ = cmd.args(["/s", "/t", "0"]).spawn();
             }
             "reboot" | "reiniciar" => {
-                let _ = Command::new("shutdown").args(["/r", "/t", "0"]).spawn();
+                let mut cmd = Command::new("shutdown");
+                cmd.creation_flags(CREATE_NO_WINDOW);
+                let _ = cmd.args(["/r", "/t", "0"]).spawn();
             }
             "lock" | "bloquear" => {
-                let _ = Command::new("rundll32.exe").args(["user32.dll,LockWorkStation"]).spawn();
+                let mut cmd = Command::new("rundll32.exe");
+                cmd.creation_flags(CREATE_NO_WINDOW);
+                let _ = cmd.args(["user32.dll,LockWorkStation"]).spawn();
             }
             "suspend" | "suspender" => {
-                let _ = Command::new("rundll32.exe").args(["powrprof.dll,SetSuspendState", "0,1,0"]).spawn();
+                let mut cmd = Command::new("rundll32.exe");
+                cmd.creation_flags(CREATE_NO_WINDOW);
+                let _ = cmd.args(["powrprof.dll,SetSuspendState", "0,1,0"]).spawn();
             }
             _ => return Err(format!("Acción desconocida: {}", action)),
         }
@@ -1629,8 +1626,21 @@ pub fn get_detailed_network_status() -> NetworkDetails {
         let mut ip_address = "127.0.0.1".to_string();
         let mut wifi_networks = Vec::new();
 
-        // 1. Check wlan interfaces
-        let wlan_out = Command::new("netsh")
+        // 1. IP address lookup via zero-subprocess UDP socket (100% stable, no PowerShell)
+        let ip_address = std::net::UdpSocket::bind("0.0.0.0:0")
+            .and_then(|s| {
+                s.connect("8.8.8.8:80")?;
+                s.local_addr()
+            })
+            .map(|addr| addr.ip().to_string())
+            .unwrap_or_else(|_| "127.0.0.1".to_string());
+
+        // 2. Check wlan interfaces quietly (CREATE_NO_WINDOW, error resilient)
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut wlan_cmd = Command::new("netsh");
+        wlan_cmd.creation_flags(CREATE_NO_WINDOW);
+        let wlan_out = wlan_cmd
             .args(["wlan", "show", "interfaces"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
@@ -1666,45 +1676,39 @@ pub fn get_detailed_network_status() -> NetworkDetails {
             } else {
                 speed_label = "300 Mbps".to_string();
             }
-        }
 
-        // 2. Discover available Wi-Fi networks via netsh
-        let networks_out = Command::new("netsh")
-            .args(["wlan", "show", "networks"])
-            .output()
-            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-            .unwrap_or_default();
+            // 3. Discover available Wi-Fi networks via netsh (only if Wi-Fi exists)
+            let mut networks_cmd = Command::new("netsh");
+            networks_cmd.creation_flags(CREATE_NO_WINDOW);
+            let networks_out = networks_cmd
+                .args(["wlan", "show", "networks"])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
 
-        let mut pending_ssid = String::new();
-        for line in networks_out.lines() {
-            let t = line.trim();
-            if t.starts_with("SSID") && !t.starts_with("SSID de BSSID") {
-                if let Some(pos) = t.find(':') {
-                    let s = t[pos + 1..].trim().to_string();
-                    if !s.is_empty() {
-                        pending_ssid = s;
+            let mut pending_ssid = String::new();
+            for line in networks_out.lines() {
+                let t = line.trim();
+                if t.starts_with("SSID") && !t.starts_with("SSID de BSSID") {
+                    if let Some(pos) = t.find(':') {
+                        let s = t[pos + 1..].trim().to_string();
+                        if !s.is_empty() {
+                            pending_ssid = s;
+                        }
+                    }
+                } else if t.starts_with("Autenticación") || t.starts_with("Authentication") {
+                    if !pending_ssid.is_empty() {
+                        let sec = t.split(':').nth(1).unwrap_or("WPA2").trim().to_string();
+                        let in_use = pending_ssid == current_ssid;
+                        wifi_networks.push(WifiNetworkItem {
+                            in_use,
+                            ssid: pending_ssid.clone(),
+                            signal: if in_use { 90 } else { 70 },
+                            security: sec,
+                        });
+                        pending_ssid.clear();
                     }
                 }
-            } else if t.starts_with("Autenticación") || t.starts_with("Authentication") {
-                if !pending_ssid.is_empty() {
-                    let sec = t.split(':').nth(1).unwrap_or("WPA2").trim().to_string();
-                    let in_use = pending_ssid == current_ssid;
-                    wifi_networks.push(WifiNetworkItem {
-                        in_use,
-                        ssid: pending_ssid.clone(),
-                        signal: if in_use { 90 } else { 70 },
-                        security: sec,
-                    });
-                    pending_ssid.clear();
-                }
-            }
-        }
-
-        // 3. Fallback IP address
-        if let Ok(ip_out) = Command::new("powershell").args(["-NoProfile", "-Command", "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress | Select-Object -First 1"]).output() {
-            let ip = String::from_utf8_lossy(&ip_out.stdout).trim().to_string();
-            if !ip.is_empty() {
-                ip_address = ip;
             }
         }
 
@@ -1834,7 +1838,11 @@ pub fn get_detailed_network_status() -> NetworkDetails {
 pub fn connect_wifi_network(ssid: String, password: Option<String>) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
-        let status = Command::new("netsh")
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = Command::new("netsh");
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let status = cmd
             .args(["wlan", "connect", &format!("name=\"{}\"", ssid)])
             .status()
             .map(|s| s.success())
@@ -1860,7 +1868,11 @@ pub fn connect_wifi_network(ssid: String, password: Option<String>) -> Result<bo
 pub fn disconnect_network(device: String) -> Result<bool, String> {
     #[cfg(target_os = "windows")]
     {
-        let status = Command::new("netsh")
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        let mut cmd = Command::new("netsh");
+        cmd.creation_flags(CREATE_NO_WINDOW);
+        let status = cmd
             .args(["wlan", "disconnect"])
             .status()
             .map(|s| s.success())
@@ -1919,11 +1931,31 @@ pub struct DetailedAudioState {
 #[tauri::command]
 pub fn get_detailed_audio_status() -> DetailedAudioState {
     let master = get_audio_status();
-    let default_sink_name = Command::new("pactl")
-        .arg("get-default-sink")
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .unwrap_or_default();
+    #[cfg(target_os = "windows")]
+    {
+        return DetailedAudioState {
+            master_volume: master.volume,
+            is_master_muted: master.is_muted,
+            is_mic_muted: master.is_mic_muted,
+            sinks: vec![AudioSinkItem {
+                id: 1,
+                name: "Altavoces / Auriculares".to_string(),
+                description: "Dispositivo de audio principal del sistema".to_string(),
+                volume: master.volume,
+                is_muted: master.is_muted,
+                is_default: true,
+            }],
+            apps: Vec::new(),
+        };
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let default_sink_name = Command::new("pactl")
+            .arg("get-default-sink")
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
 
     // 1. Parse hardware output sinks
     let sinks_raw = Command::new("pactl")
@@ -2104,12 +2136,13 @@ pub fn get_detailed_audio_status() -> DetailedAudioState {
         });
     }
 
-    DetailedAudioState {
-        master_volume: master.volume,
-        is_master_muted: master.is_muted,
-        is_mic_muted: master.is_mic_muted,
-        sinks,
-        apps,
+        DetailedAudioState {
+            master_volume: master.volume,
+            is_master_muted: master.is_muted,
+            is_mic_muted: master.is_mic_muted,
+            sinks,
+            apps,
+        }
     }
 }
 
