@@ -631,9 +631,8 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
         GetWindowThreadProcessId
     };
     use windows_sys::Win32::System::Threading::{
-        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW
     };
-    use windows_sys::Win32::System::ProcessStatus::QueryFullProcessImageNameW;
 
     let mut windows: Vec<OpenWindowItem> = Vec::new();
     let fg_hwnd = unsafe { GetForegroundWindow() };
@@ -809,10 +808,10 @@ pub fn focus_window_by_id(id: &str) -> Result<(), String> {
         use windows_sys::Win32::Foundation::HWND;
         use windows_sys::Win32::UI::WindowsAndMessaging::{
             SetForegroundWindow, ShowWindow, BringWindowToTop, GetForegroundWindow,
-            IsIconic, SW_RESTORE, SW_MINIMIZE, SW_SHOW
+            IsIconic, GetWindowThreadProcessId, SW_RESTORE, SW_MINIMIZE, SW_SHOW
         };
         use windows_sys::Win32::System::Threading::{
-            GetWindowThreadProcessId, GetCurrentThreadId, AttachThreadInput
+            GetCurrentThreadId, AttachThreadInput
         };
 
         if let Ok(hwnd_val) = id.parse::<usize>() {
