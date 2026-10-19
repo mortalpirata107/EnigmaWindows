@@ -758,6 +758,54 @@ pub fn prewarm_system_apps() {
     let _ = get_system_apps();
 }
 
+#[cfg(target_os = "windows")]
+fn infer_windows_app_icon(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("opera") { return "opera".to_string(); }
+    if lower.contains("chrome") { return "chrome".to_string(); }
+    if lower.contains("edge") { return "edge".to_string(); }
+    if lower.contains("firefox") { return "firefox".to_string(); }
+    if lower.contains("brave") { return "brave".to_string(); }
+    if lower.contains("code") || lower.contains("visual studio") { return "code".to_string(); }
+    if lower.contains("discord") { return "discord".to_string(); }
+    if lower.contains("spotify") { return "spotify".to_string(); }
+    if lower.contains("steam") { return "steam".to_string(); }
+    if lower.contains("telegram") { return "telegram".to_string(); }
+    if lower.contains("obs") { return "obs".to_string(); }
+    if lower.contains("vlc") { return "vlc".to_string(); }
+    if lower.contains("notion") { return "notion".to_string(); }
+    if lower.contains("word") || lower.contains("excel") || lower.contains("powerpoint") { return "office".to_string(); }
+    if lower.contains("git") || lower.contains("github") { return "github".to_string(); }
+    if lower.contains("terminal") || lower.contains("powershell") || lower.contains("cmd") { return "terminal".to_string(); }
+    if lower.contains("settings") || lower.contains("configuraci") || lower.contains("panel") { return "settings".to_string(); }
+    if lower.contains("explorador") || lower.contains("archivos") { return "files".to_string(); }
+    "app".to_string()
+}
+
+#[cfg(target_os = "windows")]
+fn infer_windows_app_categories(name: &str) -> String {
+    let lower = name.to_lowercase();
+    if lower.contains("chrome") || lower.contains("edge") || lower.contains("firefox") || lower.contains("opera") || lower.contains("brave") {
+        return "Network;WebBrowser".to_string();
+    }
+    if lower.contains("code") || lower.contains("visual studio") || lower.contains("git") || lower.contains("python") {
+        return "Development;IDE".to_string();
+    }
+    if lower.contains("discord") || lower.contains("telegram") || lower.contains("slack") || lower.contains("teams") {
+        return "Network;InstantMessaging".to_string();
+    }
+    if lower.contains("spotify") || lower.contains("vlc") || lower.contains("obs") || lower.contains("music") || lower.contains("video") {
+        return "AudioVideo;Player".to_string();
+    }
+    if lower.contains("steam") || lower.contains("game") || lower.contains("juego") {
+        return "Game".to_string();
+    }
+    if lower.contains("word") || lower.contains("excel") || lower.contains("powerpoint") || lower.contains("office") {
+        return "Office".to_string();
+    }
+    "Utility;System".to_string()
+}
+
 #[tauri::command]
 pub fn get_system_apps() -> Vec<AppEntry> {
     // Check in-memory cache first (valid for 5 minutes)
@@ -767,6 +815,108 @@ pub fn get_system_apps() -> Vec<AppEntry> {
                 return apps.clone();
             }
         }
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        let mut apps = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        let core_apps = vec![
+            ("explorer", "Explorador de archivos", "explorer.exe", "files", "Explorador de archivos de Windows", "System;FileManager"),
+            ("powershell", "PowerShell", "powershell.exe", "terminal", "Consola de comandos PowerShell", "System;Terminal"),
+            ("cmd", "Símbolo del sistema", "cmd.exe", "terminal", "Consola de comandos clásica", "System;Terminal"),
+            ("taskmgr", "Administrador de tareas", "taskmgr.exe", "settings", "Monitor de procesos y rendimiento", "System;Monitor"),
+            ("settings", "Configuración de Windows", "start ms-settings:", "settings", "Panel de configuración del sistema", "System;Settings"),
+            ("notepad", "Bloc de notas", "notepad.exe", "editor", "Editor de texto ligero", "Utility;TextEditor"),
+            ("calc", "Calculadora", "calc.exe", "calc", "Calculadora de Windows", "Utility;Calculator"),
+            ("edge", "Microsoft Edge", "start microsoft-edge:", "edge", "Navegador web de Microsoft", "Network;WebBrowser"),
+        ];
+
+        for (id, name, exec, icon, comment, categories) in core_apps {
+            seen.insert(id.to_string());
+            apps.push(AppEntry {
+                id: id.to_string(),
+                name: name.to_string(),
+                exec: exec.to_string(),
+                icon: icon.to_string(),
+                comment: comment.to_string(),
+                categories: categories.to_string(),
+                keywords: format!("{} {} windows", name.to_lowercase(), id),
+            });
+        }
+
+        let mut search_dirs = Vec::new();
+        if let Ok(progdata) = std::env::var("ProgramData") {
+            search_dirs.push(std::path::PathBuf::from(format!(r"{}\Microsoft\Windows\Start Menu\Programs", progdata)));
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            search_dirs.push(std::path::PathBuf::from(format!(r"{}\Microsoft\Windows\Start Menu\Programs", appdata)));
+        }
+
+        fn collect_lnk(dir: &std::path::Path, list: &mut Vec<std::path::PathBuf>) {
+            if let Ok(entries) = std::fs::read_dir(dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        collect_lnk(&path, list);
+                    } else if path.extension().and_then(|s| s.to_str()).map(|s| s.eq_ignore_ascii_case("lnk") || s.eq_ignore_ascii_case("url")).unwrap_or(false) {
+                        list.push(path);
+                    }
+                }
+            }
+        }
+
+        let mut lnk_files = Vec::new();
+        for d in search_dirs {
+            if d.exists() {
+                collect_lnk(&d, &mut lnk_files);
+            }
+        }
+
+        for p in lnk_files {
+            if let Some(stem) = p.file_stem().and_then(|s| s.to_str()) {
+                let name = stem.trim().to_string();
+                let lower_name = name.to_lowercase();
+                if lower_name.contains("uninstall") 
+                    || lower_name.contains("desinstalar")
+                    || lower_name.contains("read me")
+                    || lower_name.contains("readme")
+                    || lower_name.contains("help")
+                    || lower_name.contains("ayuda")
+                    || lower_name.contains("documentation")
+                    || lower_name.starts_with("install ")
+                {
+                    continue;
+                }
+
+                let id = lower_name.replace(' ', "-");
+                if seen.contains(&id) {
+                    continue;
+                }
+                seen.insert(id.clone());
+
+                let exec = p.to_string_lossy().to_string();
+                let icon = infer_windows_app_icon(&name);
+                let categories = infer_windows_app_categories(&name);
+
+                apps.push(AppEntry {
+                    id,
+                    name: name.clone(),
+                    exec,
+                    icon,
+                    comment: format!("Aplicación instalada: {}", name),
+                    categories,
+                    keywords: format!("{} windows", lower_name),
+                });
+            }
+        }
+
+        apps.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        if let Ok(mut lock) = SYSTEM_APPS_CACHE.lock() {
+            *lock = Some((std::time::Instant::now(), apps.clone()));
+        }
+        return apps;
     }
 
     let mut apps = Vec::new();
@@ -947,24 +1097,48 @@ pub fn open_native_path(path: String) -> Result<bool, String> {
     Ok(true)
 }
 
-/// Runs a terminal command inside Konsole or native shell
+/// Runs a terminal command inside Konsole, PowerShell, or native shell
 #[tauri::command]
 pub fn run_terminal_command(command: String) -> Result<bool, String> {
     let clean = command.trim();
     if clean.is_empty() {
         return Ok(true);
     }
-    let _ = Command::new("konsole")
-        .args(["-e", "bash", "-c", &format!("{}; echo ''; read -n 1 -s -r -p 'Presiona cualquier tecla para salir...'", clean)])
-        .spawn();
-    Ok(true)
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("cmd")
+            .args(["/C", "start", "powershell", "-NoExit", "-Command", clean])
+            .spawn();
+        return Ok(true);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("konsole")
+            .args(["-e", "bash", "-c", &format!("{}; echo ''; read -n 1 -s -r -p 'Presiona cualquier tecla para salir...'", clean)])
+            .spawn();
+        Ok(true)
+    }
 }
 
-fn record_app_launch_internal(desktop_id: &str) {
+fn get_app_usage_file() -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let dir = std::path::PathBuf::from(appdata).join("EnigmaOS");
+            let _ = std::fs::create_dir_all(&dir);
+            return Some(dir.join("app_usage.json"));
+        }
+    }
     if let Ok(home) = std::env::var("HOME") {
         let dir = std::path::PathBuf::from(home).join(".config/enigma_launcher");
         let _ = std::fs::create_dir_all(&dir);
-        let file = dir.join("app_usage.json");
+        return Some(dir.join("app_usage.json"));
+    }
+    None
+}
+
+fn record_app_launch_internal(desktop_id: &str) {
+    if let Some(file) = get_app_usage_file() {
         let mut map: std::collections::HashMap<String, u32> = if file.exists() {
             std::fs::read_to_string(&file)
                 .ok()
@@ -988,8 +1162,7 @@ pub fn record_app_launch(desktop_id: String) -> Result<bool, String> {
 
 #[tauri::command]
 pub fn get_app_usage_counts() -> std::collections::HashMap<String, u32> {
-    if let Ok(home) = std::env::var("HOME") {
-        let file = std::path::PathBuf::from(home).join(".config/enigma_launcher/app_usage.json");
+    if let Some(file) = get_app_usage_file() {
         if file.exists() {
             return std::fs::read_to_string(&file)
                 .ok()
@@ -1003,47 +1176,86 @@ pub fn get_app_usage_counts() -> std::collections::HashMap<String, u32> {
 #[tauri::command]
 pub fn launch_system_app(desktop_id: String, exec: String) -> Result<bool, String> {
     record_app_launch_internal(&desktop_id);
-    // 1. Try launching with gtk-launch first
-    if desktop_id.ends_with(".desktop") {
-        if let Ok(status) = Command::new("gtk-launch").arg(&desktop_id).status() {
-            if status.success() {
-                return Ok(true);
-            }
+
+    #[cfg(target_os = "windows")]
+    {
+        let clean = exec.trim();
+        if clean.starts_with("start ") {
+            let target = clean.trim_start_matches("start ").trim();
+            let _ = Command::new("cmd").args(["/C", "start", "", target]).spawn();
+        } else {
+            let _ = Command::new("cmd").args(["/C", "start", "", clean]).spawn();
         }
+        return Ok(true);
     }
 
-    // 2. Fallback: clean exec string (remove %u, %U, %f, %F, etc.) and launch in background
-    let clean_exec: String = exec
-        .split_whitespace()
-        .filter(|w| !w.starts_with('%'))
-        .collect::<Vec<&str>>()
-        .join(" ");
+    #[cfg(not(target_os = "windows"))]
+    {
+        // 1. Try launching with gtk-launch first
+        if desktop_id.ends_with(".desktop") {
+            if let Ok(status) = Command::new("gtk-launch").arg(&desktop_id).status() {
+                if status.success() {
+                    return Ok(true);
+                }
+            }
+        }
 
-    let _ = Command::new("sh")
-        .args(["-c", &format!("{} &", clean_exec)])
-        .spawn();
+        // 2. Fallback: clean exec string (remove %u, %U, %f, %F, etc.) and launch in background
+        let clean_exec: String = exec
+            .split_whitespace()
+            .filter(|w| !w.starts_with('%'))
+            .collect::<Vec<&str>>()
+            .join(" ");
 
-    Ok(true)
+        let _ = Command::new("sh")
+            .args(["-c", &format!("{} &", clean_exec)])
+            .spawn();
+
+        Ok(true)
+    }
 }
 
 #[tauri::command]
 pub fn execute_system_action(action: String) -> Result<bool, String> {
-    match action.as_str() {
-        "poweroff" | "shutdown" | "apagar" => {
-            let _ = Command::new("systemctl").arg("poweroff").spawn();
+    #[cfg(target_os = "windows")]
+    {
+        match action.as_str() {
+            "poweroff" | "shutdown" | "apagar" => {
+                let _ = Command::new("shutdown").args(["/s", "/t", "0"]).spawn();
+            }
+            "reboot" | "reiniciar" => {
+                let _ = Command::new("shutdown").args(["/r", "/t", "0"]).spawn();
+            }
+            "lock" | "bloquear" => {
+                let _ = Command::new("rundll32.exe").args(["user32.dll,LockWorkStation"]).spawn();
+            }
+            "suspend" | "suspender" => {
+                let _ = Command::new("rundll32.exe").args(["powrprof.dll,SetSuspendState", "0,1,0"]).spawn();
+            }
+            _ => return Err(format!("Acción desconocida: {}", action)),
         }
-        "reboot" | "reiniciar" => {
-            let _ = Command::new("systemctl").arg("reboot").spawn();
-        }
-        "lock" | "bloquear" => {
-            let _ = Command::new("loginctl").arg("lock-session").spawn();
-        }
-        "suspend" | "suspender" => {
-            let _ = Command::new("systemctl").arg("suspend").spawn();
-        }
-        _ => return Err(format!("Acción desconocida: {}", action)),
+        return Ok(true);
     }
-    Ok(true)
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        match action.as_str() {
+            "poweroff" | "shutdown" | "apagar" => {
+                let _ = Command::new("systemctl").arg("poweroff").spawn();
+            }
+            "reboot" | "reiniciar" => {
+                let _ = Command::new("systemctl").arg("reboot").spawn();
+            }
+            "lock" | "bloquear" => {
+                let _ = Command::new("loginctl").arg("lock-session").spawn();
+            }
+            "suspend" | "suspender" => {
+                let _ = Command::new("systemctl").arg("suspend").spawn();
+            }
+            _ => return Err(format!("Acción desconocida: {}", action)),
+        }
+        Ok(true)
+    }
 }
 
 // =========================================================================

@@ -564,6 +564,8 @@ fn main() {
             windows::close_window_cleanly,
             windows::get_window_thumbnail,
             windows::capture_window_thumbnail_now,
+            windows::set_windows_taskbar_visible,
+            windows::toggle_windows_taskbar,
             desktop_notifications::invoke_desktop_notification_action,
             desktop_notifications::close_desktop_notification,
             models_config::get_model_config_cmd,
@@ -582,7 +584,8 @@ fn main() {
                     whatsapp_bridge::shutdown_bridge_http();
                 }
                 tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit => {
-                    eprintln!("[Tauri] ExitRequested/Exit: Apagando puente de WhatsApp...");
+                    eprintln!("[Tauri] ExitRequested/Exit: Apagando puente de WhatsApp y restaurando barra de Windows...");
+                    let _ = windows::set_windows_taskbar_visible(true);
                     whatsapp_bridge::stop_whatsapp_bridge();
                 }
                 _ => {}

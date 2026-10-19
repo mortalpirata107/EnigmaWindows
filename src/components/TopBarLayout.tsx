@@ -83,9 +83,9 @@ export const TopBarLayout: React.FC = () => {
         style={{ position: 'absolute', top: 0, left: 0, width: 1, height: 1, opacity: 0.001, pointerEvents: 'none', willChange: 'opacity' }} 
       />
 
-      {/* 1. Cápsula Izquierda: Isla flotante anclada con margen superior (top-2 = 8px) y lateral */}
+      {/* 1. Cápsula Izquierda: Isla flotante anclada con margen superior (top-3.5 = 14px) y lateral */}
       <div 
-        className="pointer-events-auto absolute top-2 left-3 sm:left-4 m-0 p-0 z-30"
+        className="pointer-events-auto absolute top-3.5 left-3 sm:left-4 m-0 p-0 z-30"
         style={{ willChange: 'transform' }}
       >
         <LeftCapsule 
@@ -103,9 +103,9 @@ export const TopBarLayout: React.FC = () => {
         onSearchOpenChange={setIsSearchOpen}
       />
 
-      {/* 3. Cápsula Derecha: Isla flotante anclada con margen superior (top-2 = 8px) y lateral */}
+      {/* 3. Cápsula Derecha: Isla flotante anclada con margen superior (top-3.5 = 14px) y lateral */}
       <div 
-        className="pointer-events-auto absolute top-2 right-3 sm:right-4 m-0 p-0 z-30"
+        className="pointer-events-auto absolute top-3.5 right-3 sm:right-4 m-0 p-0 z-30"
         style={{ willChange: 'transform' }}
       >
         <RightCapsule 

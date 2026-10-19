@@ -56,7 +56,7 @@ export const LeftCapsule: React.FC<LeftCapsuleProps> = ({
     >
       {/* 1. Contenedor Físico Principal: Isla Flotante con bordes redondeados y micro-relieve afilado */}
       <div
-        className="flex items-center h-[34px] text-white select-none px-3.5 neu-chassis rounded-2xl shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-red-950/40"
+        className="flex items-center h-[34px] text-white select-none px-3.5 neu-chassis rounded-2xl shadow-[0_4px_12px_rgba(0,0,0,0.65)] border border-red-950/40"
       >
         <div className="flex items-center gap-2 sm:gap-2.5 h-full">
           {/* 1. Botón Enigma: Micro-relieve limpio con logo Enigma Core y texto blanco */}

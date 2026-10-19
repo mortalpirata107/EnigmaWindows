@@ -336,7 +336,7 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
                     if was_inside != Some(false) {
                         was_inside = Some(false);
                         let _ = win.set_ignore_cursor_events(true);
-                        let _ = win.emit("window_cursor_left", ());
+                        let _ = win.emit(&format!("{}_cursor_left", label), ());
                     }
                     continue;
                 }
@@ -363,9 +363,9 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
                     let should_ignore = !is_inside;
                     let _ = win.set_ignore_cursor_events(should_ignore);
                     if is_inside {
-                        let _ = win.emit("window_cursor_entered", ());
+                        let _ = win.emit(&format!("{}_cursor_entered", label), ());
                     } else {
-                        let _ = win.emit("window_cursor_left", ());
+                        let _ = win.emit(&format!("{}_cursor_left", label), ());
                     }
                 }
             }

@@ -1155,9 +1155,9 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
         ref={forcefieldRef}
         id="enigma-forcefield-container"
         onMouseLeave={handleForcefieldMouseLeave}
-        className={`absolute top-2 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto select-none m-0 z-40 ${enigmaState === 'active' ? 'gap-2.5 pb-6' : 'gap-0 pb-0'
+        className={`absolute top-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto select-none m-0 z-40 ${enigmaState === 'active' ? 'gap-2.5 pb-6' : 'gap-0 pb-0'
           }`}
-        style={{ top: 8, margin: 0 }}
+        style={{ top: 14, margin: 0 }}
       >
         {/* =========================================================================
           2.A. EL NOTCH (ARRIBA):

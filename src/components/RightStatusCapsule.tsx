@@ -218,7 +218,7 @@ export const RightStatusCapsule: React.FC<RightStatusCapsuleProps> = ({
       style={{ willChange: 'transform' }}
     >
       {/* Contenedor Físico: Isla Flotante con bordes redondeados completos */}
-      <div className="relative overflow-visible neu-chassis rounded-2xl px-3.5 py-0.5 shadow-[0_8px_24px_rgba(0,0,0,0.85)] border border-red-950/40">
+      <div className="relative overflow-visible neu-chassis rounded-2xl px-3.5 py-0.5 shadow-[0_4px_12px_rgba(0,0,0,0.65)] border border-red-950/40">
         {/* =========================================================================
             ORDEN EXACTO EXIGIDO:
             Wifi - microfono - bluetooth - notificaciones | volumen - bateria

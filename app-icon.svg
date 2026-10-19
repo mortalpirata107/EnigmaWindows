@@ -1,17 +1,87 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" rx="128" fill="#0b0c10"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
   <defs>
-    <linearGradient id="grad" x1="64" y1="64" x2="448" y2="448" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#7c3aed"/>
-      <stop offset="50%" stop-color="#ff007f"/>
-      <stop offset="100%" stop-color="#00f0ff"/>
-    </linearGradient>
-    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="16" result="blur"/>
-      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    <!-- Filtros de resplandor para los destellos y el neón -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
     </filter>
+
+    <filter id="heavyGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="15" />
+    </filter>
+
+    <!-- Sombra para darle relieve a la E sobre el fondo cuadriculado -->
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="8" flood-color="#000000" flood-opacity="0.8" />
+    </filter>
+
+    <!-- Degradado metálico brillante para la letra E -->
+    <linearGradient id="eGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff8080" />
+      <stop offset="20%" stop-color="#e60000" />
+      <stop offset="60%" stop-color="#990000" />
+      <stop offset="100%" stop-color="#330000" />
+    </linearGradient>
+
+    <!-- Degradado para el marco oscuro del hexágono central -->
+    <linearGradient id="hexRim" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#2a0000" />
+      <stop offset="100%" stop-color="#050000" />
+    </linearGradient>
+
+    <!-- Patrón cuadriculado tenue para el fondo interior del logo -->
+    <pattern id="checker" width="30" height="30" patternUnits="userSpaceOnUse">
+      <rect width="30" height="30" fill="#0a0000" />
+      <rect width="15" height="15" fill="#1a0000" />
+      <rect x="15" y="15" width="15" height="15" fill="#1a0000" />
+    </pattern>
   </defs>
-  <path d="M256 80 L430 420 C430 420 318 360 256 390 C194 360 82 420 82 420 Z" fill="url(#grad)" filter="url(#glow)"/>
-  <path d="M256 80 L360 400 C360 400 295 370 256 390 Z" fill="#ff007f" opacity="0.9"/>
-  <path d="M256 80 L152 400 C152 400 217 370 256 390 Z" fill="#00f0ff" opacity="0.9"/>
+
+  <!-- Fondo EXTERIOR negro puro -->
+  <rect width="100%" height="100%" fill="#000000" />
+
+  <!-- Resplandor ambiental trasero del hexágono -->
+  <polygon points="256,56 429,156 429,356 256,456 83,356 83,156" fill="none" stroke="#ff0000" stroke-width="15" filter="url(#heavyGlow)" opacity="0.5" />
+
+  <!-- Hexágono exterior: Línea neón brillante -->
+  <polygon points="256,56 429,156 429,356 256,456 83,356 83,156" fill="none" stroke="#ff1a1a" stroke-width="4" filter="url(#glow)" />
+  <polygon points="256,56 429,156 429,356 256,456 83,356 83,156" fill="none" stroke="#ffb3b3" stroke-width="1" />
+
+  <!-- Hexágono medio: Marco de relieve oscuro -->
+  <polygon points="256,76 411.8,166 411.8,346 256,436 100.2,346 100.2,166" fill="url(#hexRim)" stroke="#110000" stroke-width="16" />
+
+  <!-- Hexágono interior: Línea roja de acento y fondo cuadriculado -->
+  <polygon points="256,86 403,171 403,341 256,426 109,341 109,171" fill="url(#checker)" stroke="#ff0000" stroke-width="3" />
+
+  <!-- Destellos intensos laterales (Efecto Lens Flare) -->
+  <!-- Izquierda -->
+  <ellipse cx="83" cy="256" rx="2" ry="40" fill="#ffffff" filter="url(#glow)" />
+  <ellipse cx="83" cy="256" rx="6" ry="70" fill="#ff0000" filter="url(#heavyGlow)" opacity="0.9" />
+  <!-- Derecha -->
+  <ellipse cx="429" cy="256" rx="2" ry="40" fill="#ffffff" filter="url(#glow)" />
+  <ellipse cx="429" cy="256" rx="6" ry="70" fill="#ff0000" filter="url(#heavyGlow)" opacity="0.9" />
+
+  <!-- Letra E base (Geometría exterior exacta) -->
+  <path d="M 170 160 
+           L 330 160 
+           L 300 210 
+           L 230 210 
+           L 230 240 
+           L 290 240 
+           L 260 290 
+           L 230 290 
+           L 230 320 
+           L 330 320 
+           L 300 370 
+           L 170 370 Z" fill="url(#eGrad)" stroke="#ffcccc" stroke-width="1.5" filter="url(#dropShadow)" />
+
+  <!-- Cortes diagonales precisos de la E para crear los segmentos huecos -->
+  <!-- Corte Superior -->
+  <line x1="150" y1="290" x2="250" y2="190" stroke="#000000" stroke-width="12" />
+  <!-- Corte Inferior -->
+  <line x1="150" y1="370" x2="250" y2="270" stroke="#000000" stroke-width="12" />
+  
 </svg>

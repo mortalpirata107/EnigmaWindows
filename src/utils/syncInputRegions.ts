@@ -31,7 +31,7 @@ export function getTopBarRegions(): [number, number, number, number][] {
       q(h * dpr),
     ]);
   } else {
-    regions.push([q(12 * dpr), q(8 * dpr), q(280 * dpr), q(36 * dpr)]);
+    regions.push([q(12 * dpr), q(14 * dpr), q(280 * dpr), q(36 * dpr)]);
   }
 
   // 2. Center Dynamic Notch and Enigma Forcefield Container (floating dynamic island)
@@ -101,7 +101,7 @@ export function getTopBarRegions(): [number, number, number, number][] {
   } else {
     regions.push([
       q((centerX - 120) * dpr),
-      q(8 * dpr),
+      q(14 * dpr),
       q(240 * dpr),
       q(36 * dpr),
     ]);
@@ -137,7 +137,7 @@ export function getTopBarRegions(): [number, number, number, number][] {
       ]);
     }
   } else {
-    regions.push([q((screenW - 290) * dpr), q(8 * dpr), q(280 * dpr), q(36 * dpr)]);
+    regions.push([q((screenW - 290) * dpr), q(14 * dpr), q(280 * dpr), q(36 * dpr)]);
   }
 
   return regions;

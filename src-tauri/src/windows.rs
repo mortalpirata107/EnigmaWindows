@@ -567,12 +567,73 @@ static WINDOW_CLASS_CACHE: RwLock<Option<std::collections::HashMap<String, Strin
 }
 
 #[cfg(target_os = "windows")]
+fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, String, String) {
+    let lower_stem = proc_stem.to_lowercase();
+    let lower_title = title_clean.to_lowercase();
+
+    if lower_stem.contains("opera") || lower_title.contains("opera") {
+        return ("Opera".to_string(), "opera".to_string(), "opera".to_string());
+    }
+    if lower_stem.contains("chrome") || lower_title.contains("google chrome") {
+        return ("Google Chrome".to_string(), "chrome".to_string(), "chrome".to_string());
+    }
+    if lower_stem.contains("msedge") || lower_title.contains("edge") {
+        return ("Microsoft Edge".to_string(), "edge".to_string(), "edge".to_string());
+    }
+    if lower_stem.contains("firefox") {
+        return ("Firefox".to_string(), "firefox".to_string(), "firefox".to_string());
+    }
+    if lower_stem.contains("brave") {
+        return ("Brave".to_string(), "brave".to_string(), "brave".to_string());
+    }
+    if lower_stem == "code" || lower_title.contains("visual studio code") {
+        return ("VS Code".to_string(), "code".to_string(), "code".to_string());
+    }
+    if lower_stem == "explorer" {
+        return ("Explorador de archivos".to_string(), "explorer".to_string(), "files".to_string());
+    }
+    if lower_stem == "windowsterminal" || lower_stem == "powershell" || lower_stem == "cmd" {
+        return ("Terminal".to_string(), "terminal".to_string(), "terminal".to_string());
+    }
+    if lower_stem.contains("spotify") || lower_title.contains("spotify") {
+        return ("Spotify".to_string(), "spotify".to_string(), "spotify".to_string());
+    }
+    if lower_stem.contains("discord") || lower_title.contains("discord") {
+        return ("Discord".to_string(), "discord".to_string(), "discord".to_string());
+    }
+    if lower_stem.contains("telegram") {
+        return ("Telegram".to_string(), "telegram".to_string(), "telegram".to_string());
+    }
+    if lower_stem.contains("steam") {
+        return ("Steam".to_string(), "steam".to_string(), "steam".to_string());
+    }
+    if lower_stem.contains("taskmgr") {
+        return ("Administrador de tareas".to_string(), "taskmgr".to_string(), "settings".to_string());
+    }
+    if lower_stem.contains("systemsettings") || lower_title.contains("configuración") || lower_title.contains("settings") {
+        return ("Configuración".to_string(), "settings".to_string(), "settings".to_string());
+    }
+
+    let display_name = if !proc_stem.is_empty() {
+        proc_stem.to_string()
+    } else {
+        title_clean.to_string()
+    };
+    (display_name, lower_stem.clone(), lower_stem)
+}
+
+#[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn get_open_windows() -> Vec<OpenWindowItem> {
-    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, CloseHandle};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetWindowTextW, GetWindowTextLengthW, IsWindowVisible, GetForegroundWindow
+        EnumWindows, GetWindowTextW, GetWindowTextLengthW, IsWindowVisible, GetForegroundWindow,
+        GetWindowThreadProcessId
     };
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION
+    };
+    use windows_sys::Win32::System::ProcessStatus::QueryFullProcessImageNameW;
 
     let mut windows: Vec<OpenWindowItem> = Vec::new();
     let fg_hwnd = unsafe { GetForegroundWindow() };
@@ -601,18 +662,46 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
             || title_clean == "Program Manager"
             || title_clean == "EnigmaOS"
             || title_clean == "EnigmaDock"
-            || title_clean == "Settings"
             || title_clean == "Windows Input Experience"
+            || title_clean == "Shell Infrastructure Host"
+        {
+            return 1;
+        }
+
+        // Query process executable name for accurate app identification
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        let mut proc_stem = String::new();
+        if pid != 0 {
+            let h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+            if h_proc != 0 {
+                let mut p_buf = [0u16; 1024];
+                let mut p_len = p_buf.len() as u32;
+                if QueryFullProcessImageNameW(h_proc, 0, p_buf.as_mut_ptr(), &mut p_len) != 0 && p_len > 0 {
+                    let full_path = String::from_utf16_lossy(&p_buf[..p_len as usize]);
+                    if let Some(s) = std::path::Path::new(&full_path).file_stem().and_then(|x| x.to_str()) {
+                        proc_stem = s.to_string();
+                    }
+                }
+                CloseHandle(h_proc);
+            }
+        }
+
+        let lower_stem = proc_stem.to_lowercase();
+        // Ignore internal background hosts
+        if lower_stem == "searchhost"
+            || lower_stem == "shellexperiencehost"
+            || lower_stem == "textinputhost"
+            || lower_stem == "enigmaos"
+            || lower_stem == "startmenuexperiencehost"
         {
             return 1;
         }
 
         let hwnd_val = hwnd as usize;
         let id = format!("{}", hwnd_val);
-        let app_name = infer_app_name(title_clean, "");
-        let window_class = infer_window_class(title_clean, &app_name);
-        let icon = infer_icon(&app_name, title_clean);
-        let is_active = (hwnd == unsafe { GetForegroundWindow() });
+        let (app_name, window_class, icon) = map_windows_process_info(&proc_stem, title_clean);
+        let is_active = (hwnd == GetForegroundWindow());
 
         windows.push(OpenWindowItem {
             id: id.clone(),
@@ -718,12 +807,42 @@ pub fn focus_window_by_id(id: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         use windows_sys::Win32::Foundation::HWND;
-        use windows_sys::Win32::UI::WindowsAndMessaging::{SetForegroundWindow, ShowWindow, SW_RESTORE};
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SetForegroundWindow, ShowWindow, BringWindowToTop, GetForegroundWindow,
+            IsIconic, SW_RESTORE, SW_MINIMIZE, SW_SHOW
+        };
+        use windows_sys::Win32::System::Threading::{
+            GetWindowThreadProcessId, GetCurrentThreadId, AttachThreadInput
+        };
+
         if let Ok(hwnd_val) = id.parse::<usize>() {
             let hwnd = hwnd_val as HWND;
             unsafe {
-                ShowWindow(hwnd, SW_RESTORE);
-                SetForegroundWindow(hwnd);
+                let fg_hwnd = GetForegroundWindow();
+                if fg_hwnd == hwnd {
+                    // Taskbar behavior: Clicking an already focused app minimizes it
+                    ShowWindow(hwnd, SW_MINIMIZE);
+                    return Ok(());
+                }
+
+                if IsIconic(hwnd) != 0 {
+                    ShowWindow(hwnd, SW_RESTORE);
+                } else {
+                    ShowWindow(hwnd, SW_SHOW);
+                }
+
+                // Attach thread input to bypass Windows foreground restriction
+                let fg_thread = GetWindowThreadProcessId(fg_hwnd, std::ptr::null_mut());
+                let cur_thread = GetCurrentThreadId();
+                if fg_thread != 0 && fg_thread != cur_thread {
+                    AttachThreadInput(cur_thread, fg_thread, 1);
+                    SetForegroundWindow(hwnd);
+                    BringWindowToTop(hwnd);
+                    AttachThreadInput(cur_thread, fg_thread, 0);
+                } else {
+                    SetForegroundWindow(hwnd);
+                    BringWindowToTop(hwnd);
+                }
             }
             return Ok(());
         }
@@ -1249,6 +1368,59 @@ pub fn capture_window_thumbnail_now(id: String) -> Result<Option<String>, String
     }
 
     Ok(None)
+}
+
+/// Allows EnigmaOS Dock to natively hide or restore the default Windows taskbar (Seelen UI style)
+#[tauri::command]
+pub fn set_windows_taskbar_visible(visible: bool) -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, ShowWindow, SW_HIDE, SW_SHOW};
+        let class_tray: Vec<u16> = "Shell_TrayWnd".encode_utf16().chain(std::iter::once(0)).collect();
+        let cmd = if visible { SW_SHOW } else { SW_HIDE };
+        unsafe {
+            let hwnd = FindWindowW(class_tray.as_ptr(), std::ptr::null());
+            if hwnd != 0 {
+                ShowWindow(hwnd, cmd);
+            }
+            let class_sec: Vec<u16> = "Shell_SecondaryTrayWnd".encode_utf16().chain(std::iter::once(0)).collect();
+            let sec_hwnd = FindWindowW(class_sec.as_ptr(), std::ptr::null());
+            if sec_hwnd != 0 {
+                ShowWindow(sec_hwnd, cmd);
+            }
+        }
+        return Ok(visible);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = visible;
+        Ok(true)
+    }
+}
+
+/// Toggles default Windows taskbar visibility
+#[tauri::command]
+pub fn toggle_windows_taskbar() -> Result<bool, String> {
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{FindWindowW, IsWindowVisible};
+        let class_tray: Vec<u16> = "Shell_TrayWnd".encode_utf16().chain(std::iter::once(0)).collect();
+        let is_vis = unsafe {
+            let hwnd = FindWindowW(class_tray.as_ptr(), std::ptr::null());
+            if hwnd != 0 {
+                IsWindowVisible(hwnd) != 0
+            } else {
+                true
+            }
+        };
+        let next = !is_vis;
+        set_windows_taskbar_visible(next)?;
+        return Ok(next);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(true)
+    }
 }
 
 #[cfg(test)]

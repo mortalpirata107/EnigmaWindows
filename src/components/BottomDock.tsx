@@ -48,13 +48,11 @@ export interface RunningApp {
 type PinnedApp = Pick<AppItem, 'id' | 'name' | 'icon' | 'exec'>;
 
 const DEFAULT_PINNED: PinnedApp[] = [
-  { id: 'terminal', name: 'Terminal', icon: 'terminal', exec: 'powershell' },
-  { id: 'browser', name: 'Navegador Web', icon: 'brave', exec: 'start https://google.com' },
-  { id: 'antigravity', name: 'Antigravity IDE', icon: 'antigravity', exec: 'antigravity-ide' },
-  { id: 'files', name: 'Archivos', icon: 'dolphin', exec: 'explorer' },
-  { id: 'discord', name: 'Discord', icon: 'discord', exec: 'discord' },
-  { id: 'spotify', name: 'Spotify', icon: 'spotify', exec: 'spotify' },
-  { id: 'settings', name: 'Ajustes de Windows', icon: 'settings', exec: 'start ms-settings:' },
+  { id: 'files', name: 'Explorador de Archivos', icon: 'files', exec: 'explorer.exe' },
+  { id: 'browser', name: 'Navegador Web', icon: 'edge', exec: 'start microsoft-edge:' },
+  { id: 'terminal', name: 'PowerShell / Terminal', icon: 'terminal', exec: 'powershell.exe' },
+  { id: 'taskmgr', name: 'Rendimiento y Tareas', icon: 'settings', exec: 'taskmgr.exe' },
+  { id: 'settings', name: 'Configuración de Windows', icon: 'settings', exec: 'start ms-settings:' },
 ];
 
 /** Claves para emparejar una app fijada con ventanas abiertas */
@@ -135,7 +133,7 @@ export const BottomDock: React.FC = () => {
     let unlistenEnter: (() => void) | undefined;
     let unlistenLeave: (() => void) | undefined;
 
-    listen('window_cursor_entered', () => {
+    listen('dock_cursor_entered', () => {
       if (leaveTimerRef.current) {
         window.clearTimeout(leaveTimerRef.current);
         leaveTimerRef.current = null;
@@ -144,7 +142,7 @@ export const BottomDock: React.FC = () => {
       setIsHovered(true);
     }).then(u => { unlistenEnter = u; }).catch(() => {});
 
-    listen('window_cursor_left', () => {
+    listen('dock_cursor_left', () => {
       if (isLauncherOpenRef.current || contextMenuAppIdRef.current) return;
       if (leaveTimerRef.current) window.clearTimeout(leaveTimerRef.current);
       leaveTimerRef.current = window.setTimeout(() => {
@@ -161,6 +159,22 @@ export const BottomDock: React.FC = () => {
       if (unlistenLeave) unlistenLeave();
     };
   }, [mouseX]);
+
+  // Modo Seelen UI: Sustitución de barra de tareas de Windows nativa
+  const [isTaskbarHidden, setIsTaskbarHidden] = useState<boolean>(true);
+
+  useEffect(() => {
+    // Al iniciar, ocultar barra de tareas para actuar como sustituto nativo (Seelen UI style)
+    invoke<boolean>('set_windows_taskbar_visible', { visible: false })
+      .then(() => setIsTaskbarHidden(true))
+      .catch(() => {});
+  }, []);
+
+  const toggleTaskbar = useCallback(() => {
+    invoke<boolean>('toggle_windows_taskbar')
+      .then(visible => setIsTaskbarHidden(!visible))
+      .catch(() => {});
+  }, []);
 
   // =========================================================================
   // MONITOR DE PROCESOS Y APLICACIONES DINÁMICAS (Rust Backend)
@@ -270,31 +284,34 @@ export const BottomDock: React.FC = () => {
       const wid = 'id' in w ? w.id : w.window_id;
       if (claimedWindowIds.has(wid)) continue;
 
-      const cls = (w.window_class || w.app_name || wid).toLowerCase();
-      if (claimedClasses.has(cls) || seenDynamicClasses.has(cls)) continue;
-      seenDynamicClasses.add(cls);
+      const appKey = (w.app_name || w.window_class || wid).toLowerCase();
+      if (claimedClasses.has(appKey) || seenDynamicClasses.has(appKey)) continue;
+      seenDynamicClasses.add(appKey);
 
-      // Intentar vincular con .desktop del sistema para el comando Exec
+      // Intentar vincular con .desktop o app del sistema para el comando Exec
       const desktop = apps.find(a =>
-        a.id.toLowerCase().includes(cls) ||
+        a.id.toLowerCase().includes(appKey) ||
         a.name.toLowerCase() === (w.app_name || '').toLowerCase()
       );
 
-      const sameClassWins = windows.filter(x => (x.window_class || x.app_name || x.id).toLowerCase() === cls);
-      const active = sameClassWins.find(x => x.is_active);
+      const sameAppWins = windows.filter(x => {
+        const xKey = (x.app_name || x.window_class || x.id).toLowerCase();
+        return xKey === appKey || (x.app_name && w.app_name && x.app_name.toLowerCase() === w.app_name.toLowerCase());
+      });
+      const active = sameAppWins.find(x => x.is_active);
 
       unpinnedList.push({
-        id: cls,
+        id: appKey,
         name: w.app_name || desktop?.name || w.title,
-        icon: w.window_class || w.icon || cls,
-        exec: desktop?.exec || cls,
+        icon: w.icon || w.window_class || appKey,
+        exec: desktop?.exec || (w.app_name ? `${w.app_name}.exe` : appKey),
         isPinned: false,
         isRunning: true,
-        windowId: (active ?? sameClassWins[0])?.id || wid,
+        windowId: (active ?? sameAppWins[0])?.id || wid,
         isActive: Boolean(active),
-        badgeCount: badges[cls] ?? 0,
-        isBouncing: bouncingIds.has(cls),
-        windows: sameClassWins,
+        badgeCount: badges[appKey] ?? 0,
+        isBouncing: bouncingIds.has(appKey),
+        windows: sameAppWins,
       });
     }
 
@@ -320,13 +337,13 @@ export const BottomDock: React.FC = () => {
     const totalApps = pinnedApps.length + runningUnpinnedApps.length;
     const currentIconSize = visualSettings.dock_size || DOCK_ICON_SIZE;
     const appsWidth = totalApps * currentIconSize + Math.max(0, totalApps - 1) * DOCK_ICON_GAP;
-    const startWidth = currentIconSize;
+    const startWidth = currentIconSize * 2 + 8; // Start button + Taskbar toggle button
     const sepWidth = 2 * 18;
     const dividerWidth = runningUnpinnedApps.length > 0 ? 12 : 0;
     const musicWidth = 190;
     const paddingAndGaps = 32 + 32;
 
-    return Math.max(680, startWidth + sepWidth + appsWidth + dividerWidth + musicWidth + paddingAndGaps);
+    return Math.max(720, startWidth + sepWidth + appsWidth + dividerWidth + musicWidth + paddingAndGaps);
   }, [pinnedApps.length, runningUnpinnedApps.length, visualSettings.dock_size]);
 
   // =========================================================================
@@ -1156,6 +1173,27 @@ export const BottomDock: React.FC = () => {
                   <div className="w-2.5 h-2.5 rounded-[2px] neu-led-red" />
                   <div className="w-2.5 h-2.5 rounded-[2px] neu-led-red" />
                 </div>
+              </button>
+
+              {/* Botón de Sustitución de Barra de Windows (Modo Seelen UI) */}
+              <button
+                id="toggle-taskbar-btn"
+                type="button"
+                onClick={toggleTaskbar}
+                style={{ width: visualSettings.dock_size, height: visualSettings.dock_size }}
+                className={`rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer flex-shrink-0 relative overflow-hidden active:scale-95 ${
+                  isTaskbarHidden
+                    ? 'neu-inset border border-[#EF4444]/40 text-[#EF4444]'
+                    : 'neu-extruded text-white/70 hover:text-white'
+                }`}
+                title={isTaskbarHidden ? "Modo Seelen UI Activo: Barra de Windows sustituida (Clic para restaurar)" : "Barra de Windows visible (Clic para ocultar y sustituir por Enigma Dock)"}
+              >
+                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
+                  <path d="M3 5.5v5.7h8V3.2L3 5.5zm9 5.7h9V2l-9 1.8v7.4zm-9 1.6V18.5l8 2.3v-8H3zm9 0v8l9 1.8v-9.8h-9z"/>
+                </svg>
+                {isTaskbarHidden && (
+                  <div className="w-1.5 h-1.5 rounded-full neu-led-red mt-0.5" />
+                )}
               </button>
 
               {/* =================================================================
