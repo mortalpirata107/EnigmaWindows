@@ -200,8 +200,9 @@ export const AppIcon: React.FC<AppIconProps> = ({
   className = 'w-full h-full',
 }) => {
   const [imgError, setImgError] = React.useState(false);
-  const rawPath = iconPath || (windowClass?.startsWith('/') ? windowClass : (appName?.startsWith('/') ? appName : ''));
-  const isAbsPath = !!rawPath && rawPath.startsWith('/');
+  const checkIsAbs = (p?: string) => !!p && (p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p));
+  const rawPath = (iconPath || (checkIsAbs(windowClass) ? windowClass : (checkIsAbs(appName) ? appName : ''))) || '';
+  const isAbsPath = checkIsAbs(rawPath);
   const isUrl = !!rawPath && /^(https?:|data:|asset:)/.test(rawPath);
 
   if (!imgError && (isAbsPath || isUrl)) {

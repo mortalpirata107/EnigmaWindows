@@ -959,7 +959,10 @@ for (var i = 0; i < wins.length; ++i) {{
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let script_path = format!("/tmp/kwin_action_{}_{}.js", std::process::id(), ts);
+    let script_path = std::env::temp_dir()
+        .join(format!("kwin_action_{}_{}.js", std::process::id(), ts))
+        .to_string_lossy()
+        .to_string();
     if let Err(e) = std::fs::write(&script_path, script_content) {
         return Err(format!("Error escribiendo script KWin: {}", e));
     }
@@ -1245,8 +1248,8 @@ fn trigger_background_window_snapshot(uuid: String) {
 }
 
 pub fn capture_window_thumbnail_to_disk(clean_uuid: &str) -> Result<String, String> {
-    let tmp_dir = std::path::Path::new("/tmp/dock_previews");
-    let _ = std::fs::create_dir_all(tmp_dir);
+    let tmp_dir = std::env::temp_dir().join("dock_previews");
+    let _ = std::fs::create_dir_all(&tmp_dir);
 
     let persistent_dir = dirs_fallback_data_dir().join("dynamictopbar").join("previews");
     let _ = std::fs::create_dir_all(&persistent_dir);
@@ -1256,42 +1259,58 @@ pub fn capture_window_thumbnail_to_disk(clean_uuid: &str) -> Result<String, Stri
         .unwrap_or_default()
         .as_millis();
 
-    let temp_png = format!("/tmp/dock_previews/temp_{}_{}.png", clean_uuid, ts);
-    let target_jpg = format!("/tmp/dock_previews/{}.jpg", clean_uuid);
+    let temp_png = tmp_dir.join(format!("temp_{}_{}.png", clean_uuid, ts));
+    let target_jpg = tmp_dir.join(format!("{}.jpg", clean_uuid));
     let persistent_jpg = persistent_dir.join(format!("{}.jpg", clean_uuid));
 
-    let status = Command::new("spectacle")
-        .args(["-i", "-a", "-b", "-n", "-o", &temp_png])
-        .status()
-        .map_err(|e| format!("Spectacle error: {}", e))?;
-
-    if !status.success() || !std::path::Path::new(&temp_png).exists() {
-        return Err("Spectacle capture failed".to_string());
+    #[cfg(target_os = "windows")]
+    {
+        // On Windows, if persistent thumbnail already exists, reuse it
+        if persistent_jpg.exists() {
+            let _ = std::fs::copy(&persistent_jpg, &target_jpg);
+            return Ok(target_jpg.to_string_lossy().to_string());
+        }
+        return Ok(String::new());
     }
 
-    let opt_status = Command::new("magick")
-        .args([
-            &temp_png,
-            "-resize",
-            "400x",
-            "-quality",
-            "80",
-            &target_jpg,
-        ])
-        .status();
+    #[cfg(not(target_os = "windows"))]
+    {
+        let temp_png_str = temp_png.to_string_lossy().to_string();
+        let target_jpg_str = target_jpg.to_string_lossy().to_string();
 
-    let _ = std::fs::remove_file(&temp_png);
+        let status = Command::new("spectacle")
+            .args(["-i", "-a", "-b", "-n", "-o", &temp_png_str])
+            .status()
+            .map_err(|e| format!("Spectacle error: {}", e))?;
 
-    if opt_status.map(|s| s.success()).unwrap_or(false) && std::path::Path::new(&target_jpg).exists() {
-        let _ = std::fs::copy(&target_jpg, &persistent_jpg);
-        eprintln!("[Windows] 📸 Generated window thumbnail for uuid={}", clean_uuid);
-        Ok(target_jpg)
-    } else {
-        Err("Failed to resize thumbnail with magick".to_string())
+        if !status.success() || !temp_png.exists() {
+            return Err("Spectacle capture failed".to_string());
+        }
+
+        let opt_status = Command::new("magick")
+            .args([
+                &temp_png_str,
+                "-resize",
+                "400x",
+                "-quality",
+                "80",
+                &target_jpg_str,
+            ])
+            .status();
+
+        let _ = std::fs::remove_file(&temp_png);
+
+        if opt_status.map(|s| s.success()).unwrap_or(false) && target_jpg.exists() {
+            let _ = std::fs::copy(&target_jpg, &persistent_jpg);
+            eprintln!("[Windows] 📸 Generated window thumbnail for uuid={}", clean_uuid);
+            Ok(target_jpg_str)
+        } else {
+            Err("Failed to resize thumbnail with magick".to_string())
+        }
     }
 }
 
-/// Retrieves the base64-encoded thumbnail for a window ID or UUID if cached in /tmp or ~/.local/share
+/// Retrieves the base64-encoded thumbnail for a window ID or UUID if cached in temp or ~/.local/share
 #[tauri::command]
 pub fn get_window_thumbnail(id: String) -> Result<Option<String>, String> {
     let clean_uuid = id
@@ -1305,12 +1324,11 @@ pub fn get_window_thumbnail(id: String) -> Result<Option<String>, String> {
         return Ok(None);
     }
 
-    // 1. Probar en /tmp/dock_previews
-    let target_jpg = format!("/tmp/dock_previews/{}.jpg", clean_uuid);
-    let path = std::path::Path::new(&target_jpg);
+    // 1. Probar en temp/dock_previews
+    let target_jpg = std::env::temp_dir().join("dock_previews").join(format!("{}.jpg", clean_uuid));
 
-    if path.exists() {
-        if let Ok(bytes) = std::fs::read(path) {
+    if target_jpg.exists() {
+        if let Ok(bytes) = std::fs::read(&target_jpg) {
             if !bytes.is_empty() {
                 let data_url = format!("data:image/jpeg;base64,{}", BASE64_STANDARD.encode(&bytes));
                 return Ok(Some(data_url));
@@ -1351,15 +1369,17 @@ pub fn capture_window_thumbnail_now(id: String) -> Result<Option<String>, String
 
     if curr_clean == clean_uuid {
         if let Ok(path) = capture_window_thumbnail_to_disk(&clean_uuid) {
-            if let Ok(bytes) = std::fs::read(&path) {
-                let data_url = format!("data:image/jpeg;base64,{}", BASE64_STANDARD.encode(&bytes));
-                return Ok(Some(data_url));
+            if !path.is_empty() {
+                if let Ok(bytes) = std::fs::read(&path) {
+                    let data_url = format!("data:image/jpeg;base64,{}", BASE64_STANDARD.encode(&bytes));
+                    return Ok(Some(data_url));
+                }
             }
         }
     }
 
-    let target_jpg = format!("/tmp/dock_previews/{}.jpg", clean_uuid);
-    if std::path::Path::new(&target_jpg).exists() {
+    let target_jpg = std::env::temp_dir().join("dock_previews").join(format!("{}.jpg", clean_uuid));
+    if target_jpg.exists() {
         if let Ok(bytes) = std::fs::read(&target_jpg) {
             let data_url = format!("data:image/jpeg;base64,{}", BASE64_STANDARD.encode(&bytes));
             return Ok(Some(data_url));

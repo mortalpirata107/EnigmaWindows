@@ -12,6 +12,8 @@ export interface TelemetryData {
   ram_usage: number;
   wifi_ssid: string;
   wifi_enabled: boolean;
+  battery_level?: number;
+  battery_charging?: boolean;
 }
 
 const defaultTelemetry: TelemetryData = {
@@ -22,8 +24,10 @@ const defaultTelemetry: TelemetryData = {
   ram_used_gb: 12.4,
   ram_total_gb: 32.0,
   ram_usage: 38.7,
-  wifi_ssid: 'Fibra_5G_Pro',
+  wifi_ssid: 'Wi-Fi',
   wifi_enabled: true,
+  battery_level: 100,
+  battery_charging: true,
 };
 
 export function useSystemTelemetry() {

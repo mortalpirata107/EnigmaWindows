@@ -248,10 +248,21 @@ fn main() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        eprintln!("[GlobalShortcut:Plugin] Alt+3 pressed! Emitting toggle-enigma");
-                        let _ = app.emit("toggle-enigma", ());
+                        let sc_str = format!("{:?}", shortcut).to_lowercase();
+                        if sc_str.contains("space") {
+                            eprintln!("[GlobalShortcut:Plugin] Alt+Space pressed! Emitting trigger-search");
+                            let _ = app.emit("trigger-search", ());
+                        } else if sc_str.contains("keyv") || sc_str.contains("v") {
+                            eprintln!("[GlobalShortcut:Plugin] Alt+V pressed! Emitting open-clipboard-history");
+                            let _ = app.emit("open-clipboard-history", ());
+                        } else if sc_str.contains("digit3") || sc_str.contains("3") {
+                            eprintln!("[GlobalShortcut:Plugin] Alt+3 pressed! Emitting toggle-enigma");
+                            let _ = app.emit("toggle-enigma", ());
+                        } else {
+                            eprintln!("[GlobalShortcut:Plugin] Shortcut pressed: {:?}", shortcut);
+                        }
                     }
                 })
                 .build()
@@ -261,6 +272,8 @@ fn main() {
             {
                 use tauri_plugin_global_shortcut::GlobalShortcutExt;
                 let _ = app.global_shortcut().register("alt+3");
+                let _ = app.global_shortcut().register("alt+space");
+                let _ = app.global_shortcut().register("alt+v");
             }
 
             #[cfg(target_os = "linux")]

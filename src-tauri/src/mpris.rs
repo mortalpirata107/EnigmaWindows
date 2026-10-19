@@ -25,40 +25,48 @@ impl Default for MediaInfo {
     fn default() -> Self {
         Self {
             player: "spotify".to_string(),
-            status: "Paused".to_string(),
-            title: "Fantasia & Fugue in G Minor, BWV 542".to_string(),
-            artist: "Johann Sebastian Bach".to_string(),
-            album: "Bach: Organ Works".to_string(),
+            status: "Stopped".to_string(),
+            title: "Sin reproducción activa".to_string(),
+            artist: "Spotify / Multimedia".to_string(),
+            album: "".to_string(),
             art_url: "".to_string(),
-            position_secs: 216,
-            duration_secs: 357,
+            position_secs: 0,
+            duration_secs: 0,
         }
     }
 }
 
 /// Finds the active MPRIS player, preferring Spotify
 pub fn find_active_player() -> Option<String> {
-    let output = Command::new("busctl")
-        .args(["--user", "list", "--no-legend"])
-        .output()
-        .ok()?;
-
-    let text = String::from_utf8_lossy(&output.stdout);
-    let mut players = Vec::new();
-
-    for line in text.lines() {
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if let Some(&service) = parts.first() {
-            if service.starts_with("org.mpris.MediaPlayer2") {
-                if service.contains("spotify") {
-                    return Some(service.to_string());
-                }
-                players.push(service.to_string());
-            }
-        }
+    #[cfg(target_os = "windows")]
+    {
+        return Some("spotify".to_string());
     }
 
-    players.into_iter().next()
+    #[cfg(not(target_os = "windows"))]
+    {
+        let output = Command::new("busctl")
+            .args(["--user", "list", "--no-legend"])
+            .output()
+            .ok()?;
+
+        let text = String::from_utf8_lossy(&output.stdout);
+        let mut players = Vec::new();
+
+        for line in text.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if let Some(&service) = parts.first() {
+                if service.starts_with("org.mpris.MediaPlayer2") {
+                    if service.contains("spotify") {
+                        return Some(service.to_string());
+                    }
+                    players.push(service.to_string());
+                }
+            }
+        }
+
+        players.into_iter().next()
+    }
 }
 
 fn extract_busctl_string(input: &str) -> Option<String> {
@@ -114,115 +122,156 @@ fn extract_busctl_string(input: &str) -> Option<String> {
     Some(String::from_utf8_lossy(&bytes).to_string().replace("\\'", "'").replace("\\\"", "\""))
 }
 
-/// Queries metadata and playback position from D-Bus
+/// Queries metadata and playback position from D-Bus or Windows open window titles
 pub fn get_media_status_internal() -> MediaInfo {
-    let player = match find_active_player() {
-        Some(p) => p,
-        None => return MediaInfo::default(),
-    };
-
-    // 1. PlaybackStatus
-    let status_output = Command::new("busctl")
-        .args(["--user", "get-property", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlaybackStatus"])
-        .output()
-        .ok();
-
-    let mut status = "Stopped".to_string();
-    if let Some(out) = status_output {
-        let text = String::from_utf8_lossy(&out.stdout);
-        if text.contains("Playing") {
-            status = "Playing".to_string();
-        } else if text.contains("Paused") {
-            status = "Paused".to_string();
-        }
-    }
-
-    // 2. Position
-    let pos_output = Command::new("busctl")
-        .args(["--user", "get-property", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Position"])
-        .output()
-        .ok();
-
-    let mut position_secs = 0i64;
-    if let Some(out) = pos_output {
-        let text = String::from_utf8_lossy(&out.stdout);
-        for word in text.split_whitespace() {
-            if let Ok(micro) = word.parse::<i64>() {
-                position_secs = micro / 1_000_000;
-                break;
+    #[cfg(target_os = "windows")]
+    {
+        let open_windows = crate::windows::get_open_windows();
+        for win in open_windows {
+            let app_name = win.app_name.to_lowercase();
+            let title = win.title.trim();
+            if app_name.contains("spotify") || title.to_lowercase().contains("spotify") {
+                if title.contains(" - ") {
+                    let parts: Vec<&str> = title.splitn(2, " - ").collect();
+                    if parts.len() == 2 {
+                        return MediaInfo {
+                            player: "spotify".to_string(),
+                            status: "Playing".to_string(),
+                            artist: parts[0].trim().to_string(),
+                            title: parts[1].trim().to_string(),
+                            album: String::new(),
+                            art_url: String::new(),
+                            position_secs: 0,
+                            duration_secs: 0,
+                        };
+                    }
+                } else if !title.is_empty() {
+                    return MediaInfo {
+                        player: "spotify".to_string(),
+                        status: "Paused".to_string(),
+                        artist: "Spotify".to_string(),
+                        title: "En pausa".to_string(),
+                        album: String::new(),
+                        art_url: String::new(),
+                        position_secs: 0,
+                        duration_secs: 0,
+                    };
+                }
             }
         }
+        return MediaInfo::default();
     }
 
-    // 3. Metadata
-    let meta_output = Command::new("busctl")
-        .args(["--user", "get-property", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Metadata"])
-        .output()
-        .ok();
+    #[cfg(not(target_os = "windows"))]
+    {
+        let player = match find_active_player() {
+            Some(p) => p,
+            None => return MediaInfo::default(),
+        };
 
-    let mut title = "Unknown Title".to_string();
-    let mut artist = "Unknown Artist".to_string();
-    let mut album = "".to_string();
-    let mut art_url = "".to_string();
-    let mut duration_secs = 0i64;
+        // 1. PlaybackStatus
+        let status_output = Command::new("busctl")
+            .args(["--user", "get-property", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlaybackStatus"])
+            .output()
+            .ok();
 
-    if let Some(out) = meta_output {
-        let text = String::from_utf8_lossy(&out.stdout);
-
-        // Title
-        if let Some(start) = text.find("\"xesam:title\" s \"") {
-            let rem = &text[start + 17..];
-            if let Some(val) = extract_busctl_string(rem) {
-                title = val;
+        let mut status = "Stopped".to_string();
+        if let Some(out) = status_output {
+            let text = String::from_utf8_lossy(&out.stdout);
+            if text.contains("Playing") {
+                status = "Playing".to_string();
+            } else if text.contains("Paused") {
+                status = "Paused".to_string();
             }
         }
 
-        // Artist
-        if let Some(start) = text.find("\"xesam:artist\" as") {
-            let rem = &text[start + 16..];
-            if let Some(quote_start) = rem.find('"') {
-                let rem2 = &rem[quote_start + 1..];
-                if let Some(val) = extract_busctl_string(rem2) {
-                    artist = val;
+        // 2. Position
+        let pos_output = Command::new("busctl")
+            .args(["--user", "get-property", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Position"])
+            .output()
+            .ok();
+
+        let mut position_secs = 0i64;
+        if let Some(out) = pos_output {
+            let text = String::from_utf8_lossy(&out.stdout);
+            for word in text.split_whitespace() {
+                if let Ok(micro) = word.parse::<i64>() {
+                    position_secs = micro / 1_000_000;
+                    break;
                 }
             }
         }
 
-        // Album
-        if let Some(start) = text.find("\"xesam:album\" s \"") {
-            let rem = &text[start + 17..];
-            if let Some(val) = extract_busctl_string(rem) {
-                album = val;
+        // 3. Metadata
+        let meta_output = Command::new("busctl")
+            .args(["--user", "get-property", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Metadata"])
+            .output()
+            .ok();
+
+        let mut title = "Unknown Title".to_string();
+        let mut artist = "Unknown Artist".to_string();
+        let mut album = "".to_string();
+        let mut art_url = "".to_string();
+        let mut duration_secs = 0i64;
+
+        if let Some(out) = meta_output {
+            let text = String::from_utf8_lossy(&out.stdout);
+
+            // Title
+            if let Some(start) = text.find("\"xesam:title\" s \"") {
+                let rem = &text[start + 17..];
+                if let Some(val) = extract_busctl_string(rem) {
+                    title = val;
+                }
+            }
+
+            // Artist
+            if let Some(start) = text.find("\"xesam:artist\" as") {
+                let rem = &text[start + 16..];
+                if let Some(quote_start) = rem.find('"') {
+                    let rem2 = &rem[quote_start + 1..];
+                    if let Some(val) = extract_busctl_string(rem2) {
+                        artist = val;
+                    }
+                }
+            }
+
+            // Album
+            if let Some(start) = text.find("\"xesam:album\" s \"") {
+                let rem = &text[start + 17..];
+                if let Some(val) = extract_busctl_string(rem) {
+                    album = val;
+                }
+            }
+
+            // Art URL
+            if let Some(start) = text.find("\"mpris:artUrl\" s \"") {
+                let rem = &text[start + 18..];
+                if let Some(end) = rem.find('"') {
+                    art_url = rem[..end].to_string();
+                }
+            }
+
+            // Duration length
+            if let Some(start) = text.find("\"mpris:length\" t ") {
+                let rem = &text[start + 17..];
+                let num_str: String = rem.chars().take_while(|c| c.is_digit(10)).collect();
+                if let Ok(micro) = num_str.parse::<i64>() {
+                    duration_secs = micro / 1_000_000;
+                }
             }
         }
 
-        // Art URL
-        if let Some(start) = text.find("\"mpris:artUrl\" s \"") {
-            let rem = &text[start + 18..];
-            if let Some(end) = rem.find('"') {
-                art_url = rem[..end].to_string();
-            }
+        MediaInfo {
+            player,
+            status,
+            title,
+            artist,
+            album,
+            art_url,
+            position_secs,
+            duration_secs,
         }
-
-        // Duration length
-        if let Some(start) = text.find("\"mpris:length\" t ") {
-            let rem = &text[start + 17..];
-            let num_str: String = rem.chars().take_while(|c| c.is_digit(10)).collect();
-            if let Ok(micro) = num_str.parse::<i64>() {
-                duration_secs = micro / 1_000_000;
-            }
-        }
-    }
-
-    MediaInfo {
-        player,
-        status,
-        title,
-        artist,
-        album,
-        art_url,
-        position_secs,
-        duration_secs,
     }
 }
 
@@ -235,34 +284,57 @@ pub fn get_media_status() -> MediaInfo {
 /// Tauri command to send playback control commands
 #[tauri::command]
 pub fn media_control(action: String, value: Option<i64>) -> Result<(), String> {
-    let player = find_active_player().unwrap_or_else(|| "org.mpris.MediaPlayer2.spotify".to_string());
-    match action.as_str() {
-        "play_pause" => {
-            let _ = Command::new("busctl")
-                .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlayPause"])
-                .status();
-        }
-        "next" => {
-            let _ = Command::new("busctl")
-                .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Next"])
-                .status();
-        }
-        "previous" => {
-            let _ = Command::new("busctl")
-                .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Previous"])
-                .status();
-        }
-        "seek" => {
-            if let Some(pos_secs) = value {
-                let pos_micro = pos_secs * 1_000_000;
-                let _ = Command::new("busctl")
-                    .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Seek", "x", &pos_micro.to_string()])
-                    .status();
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            keybd_event, KEYEVENTF_KEYUP, VK_MEDIA_NEXT_TRACK, VK_MEDIA_PLAY_PAUSE, VK_MEDIA_PREV_TRACK,
+        };
+        let vk = match action.as_str() {
+            "play_pause" => Some(VK_MEDIA_PLAY_PAUSE),
+            "next" => Some(VK_MEDIA_NEXT_TRACK),
+            "previous" => Some(VK_MEDIA_PREV_TRACK),
+            _ => None,
+        };
+        if let Some(key) = vk {
+            unsafe {
+                keybd_event(key as u8, 0, 0, 0);
+                keybd_event(key as u8, 0, KEYEVENTF_KEYUP, 0);
             }
         }
-        _ => {}
+        return Ok(());
     }
-    Ok(())
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let player = find_active_player().unwrap_or_else(|| "org.mpris.MediaPlayer2.spotify".to_string());
+        match action.as_str() {
+            "play_pause" => {
+                let _ = Command::new("busctl")
+                    .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "PlayPause"])
+                    .status();
+            }
+            "next" => {
+                let _ = Command::new("busctl")
+                    .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Next"])
+                    .status();
+            }
+            "previous" => {
+                let _ = Command::new("busctl")
+                    .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Previous"])
+                    .status();
+            }
+            "seek" => {
+                if let Some(pos_secs) = value {
+                    let pos_micro = pos_secs * 1_000_000;
+                    let _ = Command::new("busctl")
+                        .args(["--user", "call", &player, "/org/mpris/MediaPlayer2", "org.mpris.MediaPlayer2.Player", "Seek", "x", &pos_micro.to_string()])
+                        .status();
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
 }
 
 /// Spawns a background worker thread that polls Spotify / MPRIS every 800ms

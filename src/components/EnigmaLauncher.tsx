@@ -33,7 +33,7 @@ export interface EnigmaLauncherProps {
 
 const LauncherIcon: React.FC<{ icon: string; name: string }> = ({ icon, name }) => {
   const [hasError, setHasError] = useState(false);
-  const isAbsPath = icon.startsWith('/');
+  const isAbsPath = icon.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(icon);
   const isUrl = /^(https?:|data:|asset:)/.test(icon);
   if (!hasError && (isAbsPath || isUrl)) {
     return (
@@ -711,7 +711,7 @@ export const EnigmaLauncher: React.FC<EnigmaLauncherProps> = ({
                   type="button"
                   onClick={() => executeAction('lock')}
                   className="flex items-center gap-2 p-2.5 rounded-2xl neu-extruded text-white transition-all cursor-pointer text-left active:scale-95 group"
-                  title="Bloquear sesión KDE"
+                  title="Bloquear equipo"
                 >
                   <Lock className="w-3.5 h-3.5 text-[#EF4444] shrink-0" />
                   <span className="text-[11px] font-mono font-bold text-white">Bloquear</span>

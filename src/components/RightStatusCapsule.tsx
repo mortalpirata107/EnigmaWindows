@@ -16,6 +16,7 @@ import {
 import { useAudioControl } from '../hooks/useAudioControl';
 import { useDetailedBluetooth } from '../hooks/useDetailedBluetooth';
 import { useDetailedNetwork } from '../hooks/useDetailedNetwork';
+import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { BluetoothContent } from './BluetoothContent';
 import { NetworkContent } from './NetworkContent';
 import { VolumeContent } from './VolumeContent';
@@ -50,6 +51,9 @@ export const RightStatusCapsule: React.FC<RightStatusCapsuleProps> = ({
   const { volume, is_muted, is_mic_muted, toggleMicMute } = useAudioControl();
   const { state: btState } = useDetailedBluetooth();
   const { network } = useDetailedNetwork();
+  const telemetry = useSystemTelemetry();
+  const batteryLevel = telemetry.battery_level ?? 100;
+  const isCharging = telemetry.battery_charging ?? true;
 
   // =========================================================================
   // 1. GESTIÓN EFICIENTE DE HITBOX CON RUST / WAYLAND (SIN SOBRECARGA IPC)
@@ -432,28 +436,30 @@ export const RightStatusCapsule: React.FC<RightStatusCapsuleProps> = ({
           </motion.div>
 
           {/* =========================================================================
-              7. BATERÍA: Píldora uniforme h-7 con micro-relieve limpio
+              7. BATERÍA: Píldora uniforme h-7 con micro-relieve limpio y datos reales
               ========================================================================= */}
           <motion.div 
             layout="position"
             transition={springTransition}
             whileHover={{ scale: 1.05 }}
             className="flex items-center gap-1.5 h-7 px-2.5 rounded-full bg-[#08080C] border border-white/5 hover:border-[#EF4444]/30 shadow-[inset_1px_1px_3px_#000,0_1px_0_rgba(255,255,255,0.04)] cursor-pointer text-white shrink-0 whitespace-nowrap self-start" 
-            title="Batería: 100% (Conectado a CA)"
+            title={`Batería: ${batteryLevel}% (${isCharging ? 'Conectado a la corriente' : 'En batería'})`}
           >
             <motion.div
               animate={{ 
-                filter: [
+                filter: isCharging ? [
                   'drop-shadow(0 0 2px rgba(239,68,68,0.6))',
                   'drop-shadow(0 0 5px rgba(239,68,68,0.9))',
                   'drop-shadow(0 0 2px rgba(239,68,68,0.6))'
-                ]
+                ] : undefined
               }}
               transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
             >
-              <Battery className="w-3.5 h-3.5 text-[#EF4444]" />
+              <Battery className={`w-3.5 h-3.5 ${batteryLevel <= 20 && !isCharging ? 'text-amber-500' : 'text-[#EF4444]'}`} />
             </motion.div>
-            <span className="font-mono font-bold text-white text-[11px] font-mono-num whitespace-nowrap">100%</span>
+            <span className="font-mono font-bold text-white text-[11px] font-mono-num whitespace-nowrap">
+              {batteryLevel}%{isCharging ? ' ⚡' : ''}
+            </span>
           </motion.div>
 
         </div>

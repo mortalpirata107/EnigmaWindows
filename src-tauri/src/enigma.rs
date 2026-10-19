@@ -190,7 +190,8 @@ pub fn init_speech_worker() {
                             .duration_since(std::time::UNIX_EPOCH)
                             .unwrap_or_default()
                             .as_millis();
-                        let wav_path = format!("/tmp/enigma_speech_{}.wav", ts);
+                        let temp_dir = std::env::temp_dir();
+                        let wav_path = temp_dir.join(format!("enigma_speech_{}.wav", ts)).to_string_lossy().to_string();
 
                         eprintln!(
                             "[Piper TTS] Generando síntesis neuronal ({} caracteres)...",
@@ -249,24 +250,47 @@ pub fn init_speech_worker() {
                             }
                         }
 
-                        // Reproducción directa e infalible desde Rust con pw-play / paplay
-                        let (player_cmd, player_args) = find_audio_player();
-                        let mut args = player_args.clone();
-                        args.push(&wav_path);
+                        // Reproducción directa desde Rust
+                        #[cfg(target_os = "windows")]
+                        {
+                            let escaped = wav_path.replace('\\', "/");
+                            let ps_play = format!("(New-Object Media.SoundPlayer '{}').PlaySync();", escaped);
+                            let _ = Command::new("powershell")
+                                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_play])
+                                .status();
+                        }
 
-                        if let Ok(mut player_child) = Command::new(player_cmd).args(&args).spawn() {
-                            if let Ok(mut pid_lock) = CURRENT_PLAYER_PID.lock() {
-                                *pid_lock = Some(player_child.id());
-                            }
-                            let _ = player_child.wait();
-                            if let Ok(mut pid_lock) = CURRENT_PLAYER_PID.lock() {
-                                *pid_lock = None;
+                        #[cfg(not(target_os = "windows"))]
+                        {
+                            let (player_cmd, player_args) = find_audio_player();
+                            let mut args = player_args.clone();
+                            args.push(&wav_path);
+
+                            if let Ok(mut player_child) = Command::new(player_cmd).args(&args).spawn() {
+                                if let Ok(mut pid_lock) = CURRENT_PLAYER_PID.lock() {
+                                    *pid_lock = Some(player_child.id());
+                                }
+                                let _ = player_child.wait();
+                                if let Ok(mut pid_lock) = CURRENT_PLAYER_PID.lock() {
+                                    *pid_lock = None;
+                                }
                             }
                         }
 
                         let _ = std::fs::remove_file(&wav_path);
                     } else {
-                        eprintln!("[TTS] Ni spd-say ni el modelo de Piper están disponibles.");
+                        #[cfg(target_os = "windows")]
+                        {
+                            let clean_text = trimmed.replace('\'', " ");
+                            let ps_cmd = format!("Add-Type -AssemblyName System.Speech; $synth = New-Object System.Speech.Synthesis.SpeechSynthesizer; $synth.Speak('{}');", clean_text);
+                            let _ = Command::new("powershell")
+                                .args(["-NoProfile", "-NonInteractive", "-Command", &ps_cmd])
+                                .status();
+                        }
+                        #[cfg(not(target_os = "windows"))]
+                        {
+                            eprintln!("[TTS] Ni spd-say ni el modelo de Piper están disponibles.");
+                        }
                     }
 
                     // 5. Restaurar volumen de música y notificar fin de locución

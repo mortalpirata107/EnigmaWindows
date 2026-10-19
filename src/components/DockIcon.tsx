@@ -81,7 +81,7 @@ function pathsFromDataTransfer(dt: DataTransfer): string[] {
  */
 const IconGlyph: React.FC<{ icon: string; name: string }> = ({ icon, name }) => {
   const [hasError, setHasError] = React.useState(false);
-  const isAbsPath = icon.startsWith('/');
+  const isAbsPath = icon.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(icon);
   const isUrl = /^(https?:|data:|asset:)/.test(icon);
   if (!hasError && (isAbsPath || isUrl)) {
     return (
@@ -233,8 +233,12 @@ export const DockIcon: React.FC<DockIconProps> = ({
           if (!filePath) {
             const text = e.dataTransfer.getData('text/plain') || '';
             if (text.startsWith('file://')) {
-              try { filePath = decodeURIComponent(new URL(text).pathname); } catch {}
-            } else if (text.startsWith('/')) {
+              try {
+                let parsed = decodeURIComponent(new URL(text).pathname);
+                if (parsed.startsWith('/') && /^\/[a-zA-Z]:/.test(parsed)) parsed = parsed.slice(1);
+                filePath = parsed;
+              } catch {}
+            } else if (text.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(text)) {
               filePath = text.trim();
             }
           }

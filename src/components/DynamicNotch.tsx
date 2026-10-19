@@ -18,7 +18,7 @@ import { ClipboardHistoryModal } from './ClipboardHistoryModal';
 import { Eye, Scan, Monitor } from 'lucide-react';
 
 const NotificationIcon: React.FC<{ icon?: string; appName?: string }> = ({ icon, appName }) => {
-  const isAbsPath = icon && icon.startsWith('/');
+  const isAbsPath = icon && (icon.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(icon));
   const isUrl = icon && /^(https?:|data:|asset:)/.test(icon);
   if (isAbsPath || isUrl) {
     return (

@@ -70,6 +70,16 @@ Instala **EnigmaOS** con un solo clic en tu equipo con Windows 10 o Windows 11 d
 ### 4. 🎯 Desacoplamiento Total de Eventos Notch ⇄ Dock
 - **Eventos Dirigidos por Ventana:** Los eventos de cursor de hardware (`dock_cursor_entered`, `main_cursor_entered`) están aislados por etiqueta de ventana. Pasar el ratón por el Notch superior **nunca** abrirá el Dock inferior accidentalmente.
 
+### 5. ⌨️ Atajos Globales de Teclado Nativos
+- **`Alt + Space`**: Abre/cierra instantáneamente la búsqueda universal Spotlight de aplicaciones y archivos.
+- **`Alt + V`**: Despliega el gestor e historial inteligente de portapapeles.
+- **`Alt + 3`**: Abre y cierra la consola de IA Enigma.
+
+### 6. 🔋 Telemetría de Batería y Multimedia Real en Windows
+- **Win32 `GetSystemPowerStatus`:** Porcentaje y estado de carga real sincronizados cada segundo en la cápsula de estado superior.
+- **Controles Multimedia Nativos:** Control directo de Spotify y reproductores multimedia del sistema mediante pulsaciones virtuales nativas sin intermediarios externos.
+- **Documentos Recientes de Windows:** Exploración directa de archivos abiertos recientemente desde `%APPDATA%\Microsoft\Windows\Recent`.
+
 ---
 
 ## 🧠 Guía de Modelos de Inteligencia Artificial (Ollama Local)

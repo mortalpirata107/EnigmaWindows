@@ -26,10 +26,10 @@ export const BluetoothContent: React.FC = () => {
       onClick={(e) => e.stopPropagation()}
     >
       {/* 1. Header con Interruptor de Encendido/Apagado */}
-      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#b82a2a]/20 shrink-0">
+      <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#EF4444]/20 shrink-0">
         <div className="flex items-center gap-2">
-          <div className="w-7 h-7 rounded-lg bg-[#08080C] border border-[#b82a2a]/50 flex items-center justify-center text-[#b82a2a] shadow-[0_0_8px_rgba(184,42,42,0.3)]">
-            <Bluetooth className="w-4 h-4 text-[#b82a2a]" />
+          <div className="w-7 h-7 rounded-lg bg-[#08080C] border border-[#EF4444]/50 flex items-center justify-center text-[#EF4444] shadow-[0_0_8px_rgba(239,68,68,0.3)]">
+            <Bluetooth className="w-4 h-4 text-[#EF4444]" />
           </div>
           <div>
             <span className="text-xs font-bold font-mono tracking-wider text-white uppercase block">
@@ -47,7 +47,7 @@ export const BluetoothContent: React.FC = () => {
             onClick={() => togglePower(!state.powered)}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-mono font-bold transition-all cursor-pointer ${
               state.powered
-                ? 'bg-[#b82a2a] border border-[#b82a2a] text-white shadow-[0_0_10px_rgba(184,42,42,0.5)]'
+                ? 'bg-[#EF4444] border border-[#EF4444] text-white shadow-[0_0_10px_rgba(239,68,68,0.5)]'
                 : 'bg-[#08080C] border border-white/20 text-white/60 hover:text-white'
             }`}
           >
@@ -61,17 +61,17 @@ export const BluetoothContent: React.FC = () => {
       <div className="flex-1 overflow-y-auto space-y-3 pr-1 custom-scrollbar min-h-0">
         {!state.powered ? (
           <div className="text-center py-8">
-            <Bluetooth className="w-10 h-10 text-[#b82a2a]/40 mx-auto mb-2" />
+            <Bluetooth className="w-10 h-10 text-[#EF4444]/40 mx-auto mb-2" />
             <p className="text-xs text-white/60 font-mono">El Bluetooth está desactivado</p>
-            <p className="text-[11px] text-white/40 mt-1">Actívalo para conectar auriculares y mandos</p>
+            <p className="text-[11px] text-white/40 mt-1">Actívalo para conectar auriculares y periféricos</p>
           </div>
         ) : (
           <>
             {/* SECCIÓN 1: DISPOSITIVOS CONECTADOS */}
             <div>
               <div className="flex items-center justify-between mb-1.5 px-1">
-                <span className="text-[11px] font-mono font-bold text-[#b82a2a] uppercase tracking-wider flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3 h-3 text-[#b82a2a]" />
+                <span className="text-[11px] font-mono font-bold text-[#EF4444] uppercase tracking-wider flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3 h-3 text-[#EF4444]" />
                   Conectados ({state.connected_devices.length})
                 </span>
               </div>
@@ -84,7 +84,7 @@ export const BluetoothContent: React.FC = () => {
                   state.connected_devices.map((dev) => (
                     <div
                       key={dev.mac}
-                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#08080C] border border-[#b82a2a]/40 shadow-[0_0_8px_rgba(184,42,42,0.15)]"
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#08080C] border border-[#EF4444]/40 shadow-[0_0_8px_rgba(239,68,68,0.15)]"
                     >
                       <div className="min-w-0 pr-2">
                         <span className="text-xs font-semibold text-white block truncate">
@@ -98,7 +98,7 @@ export const BluetoothContent: React.FC = () => {
                         type="button"
                         onClick={() => disconnectDevice(dev.mac)}
                         disabled={isLoading}
-                        className="px-2.5 py-1 rounded-lg bg-[#08080C] border border-[#b82a2a]/40 text-[10px] font-mono font-bold text-[#b82a2a] hover:bg-[#b82a2a]/20 hover:text-white transition-all cursor-pointer shrink-0"
+                        className="px-2.5 py-1 rounded-lg bg-[#08080C] border border-[#EF4444]/40 text-[10px] font-mono font-bold text-[#EF4444] hover:bg-[#EF4444]/20 hover:text-white transition-all cursor-pointer shrink-0"
                       >
                         Desconectar
                       </button>
@@ -112,7 +112,7 @@ export const BluetoothContent: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1.5 px-1">
                 <span className="text-[11px] font-mono font-bold text-white/70 uppercase tracking-wider flex items-center gap-1.5">
-                  <Link2 className="w-3 h-3 text-[#b82a2a]" />
+                  <Link2 className="w-3 h-3 text-[#EF4444]" />
                   Emparejados ({state.paired_devices.length})
                 </span>
               </div>
@@ -125,7 +125,7 @@ export const BluetoothContent: React.FC = () => {
                   state.paired_devices.map((dev) => (
                     <div
                       key={dev.mac}
-                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#08080C] border border-white/10 hover:border-[#b82a2a]/30 transition-colors"
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#08080C] border border-white/10 hover:border-[#EF4444]/30 transition-colors"
                     >
                       <div className="min-w-0 pr-2">
                         <span className="text-xs font-medium text-white block truncate">
@@ -141,7 +141,7 @@ export const BluetoothContent: React.FC = () => {
                           onClick={() => unpairDevice(dev.mac)}
                           disabled={isLoading}
                           title="Desemparejar dispositivo"
-                          className="p-1 rounded-lg bg-[#08080C] border border-white/10 text-white/50 hover:text-[#b82a2a] hover:border-[#b82a2a]/40 transition-all cursor-pointer"
+                          className="p-1 rounded-lg bg-[#08080C] border border-white/10 text-white/50 hover:text-[#EF4444] hover:border-[#EF4444]/40 transition-all cursor-pointer"
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
@@ -149,7 +149,7 @@ export const BluetoothContent: React.FC = () => {
                           type="button"
                           onClick={() => pairDevice(dev.mac)}
                           disabled={isLoading}
-                          className="px-2.5 py-1 rounded-lg bg-[#08080C] border border-[#b82a2a]/50 text-[10px] font-mono font-bold text-white hover:bg-[#b82a2a]/30 transition-all cursor-pointer"
+                          className="px-2.5 py-1 rounded-lg bg-[#08080C] border border-[#EF4444]/50 text-[10px] font-mono font-bold text-white hover:bg-[#EF4444]/30 transition-all cursor-pointer"
                         >
                           Conectar
                         </button>
@@ -164,7 +164,7 @@ export const BluetoothContent: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-1.5 px-1">
                 <span className="text-[11px] font-mono font-bold text-white/70 uppercase tracking-wider flex items-center gap-1.5">
-                  <Radio className="w-3 h-3 text-[#b82a2a]" />
+                  <Radio className="w-3 h-3 text-[#EF4444]" />
                   Disponibles ({state.available_devices.length})
                 </span>
               </div>
@@ -177,7 +177,7 @@ export const BluetoothContent: React.FC = () => {
                   state.available_devices.map((dev) => (
                     <div
                       key={dev.mac}
-                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#08080C] border border-white/10 hover:border-[#b82a2a]/30 transition-colors"
+                      className="flex items-center justify-between px-3 py-2 rounded-xl bg-[#08080C] border border-white/10 hover:border-[#EF4444]/30 transition-colors"
                     >
                       <div className="min-w-0 pr-2">
                         <span className="text-xs font-medium text-white block truncate">
@@ -191,9 +191,9 @@ export const BluetoothContent: React.FC = () => {
                         type="button"
                         onClick={() => pairDevice(dev.mac)}
                         disabled={isLoading}
-                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#08080C] border border-[#b82a2a]/40 text-[10px] font-mono font-bold text-[#b82a2a] hover:bg-[#b82a2a]/20 hover:text-white transition-all cursor-pointer shrink-0"
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#08080C] border border-[#EF4444]/40 text-[10px] font-mono font-bold text-[#EF4444] hover:bg-[#EF4444]/20 hover:text-white transition-all cursor-pointer shrink-0"
                       >
-                        <PlusCircle className="w-3 h-3 text-[#b82a2a]" />
+                        <PlusCircle className="w-3 h-3 text-[#EF4444]" />
                         <span>Emparejar</span>
                       </button>
                     </div>

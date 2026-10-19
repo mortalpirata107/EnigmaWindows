@@ -1063,8 +1063,9 @@ export const BottomDock: React.FC = () => {
   };
 
   const isPlaying = media.status === 'Playing';
-  const songTitle = media.title || 'Unité';
-  const songArtist = media.artist || 'Joshua Kyan Aalampour';
+  const hasTrack = !!(media.title && media.title !== 'Sin reproducción activa' && media.title !== 'Unknown Title');
+  const songTitle = hasTrack ? media.title : 'Spotify / Multimedia';
+  const songArtist = hasTrack ? (media.artist || 'Reproductor') : 'Sin reproducción activa';
 
   return (
     <div

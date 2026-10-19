@@ -75,74 +75,110 @@ fn capture_and_process_screen_inner(mode: &str) -> Result<(String, String), Stri
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis();
-    let raw_png = format!("/tmp/enigma_vision_raw_{}.png", ts);
-    let optimized_jpg = format!("/tmp/enigma_vision_{}.jpg", ts);
-    let thumb_jpg = format!("/tmp/enigma_vision_thumb_{}.jpg", ts);
-    let last_jpg = "/tmp/enigma_vision_last.jpg";
+    let temp_dir = std::env::temp_dir();
+    let raw_png = temp_dir.join(format!("enigma_vision_raw_{}.png", ts)).to_string_lossy().to_string();
+    let optimized_jpg = temp_dir.join(format!("enigma_vision_{}.png", ts)).to_string_lossy().to_string();
+    let thumb_jpg = temp_dir.join(format!("enigma_vision_thumb_{}.png", ts)).to_string_lossy().to_string();
+    let last_jpg = temp_dir.join("enigma_vision_last.png").to_string_lossy().to_string();
 
     let raw_png_path = Path::new(&raw_png);
     let optimized_jpg_path = Path::new(&optimized_jpg);
     let thumb_jpg_path = Path::new(&thumb_jpg);
 
-    // 1. Ejecutar spectacle según el modo seleccionado
-    let is_region = mode == "region" || mode == "area" || mode == "rect" || mode == "recorte";
-    let is_window = mode == "active_window" || mode == "window" || mode == "ventana";
     let mut success = false;
 
-    if is_region {
-        eprintln!("[Vision] 📐 Capturando región rectangular interactiva con spectacle -r -b -k -n -o...");
-        let status = Command::new("spectacle")
-            .args(["-r", "-b", "-k", "-n", "-o", &raw_png])
+    #[cfg(target_os = "windows")]
+    {
+        let escaped_path = raw_png.replace('\\', "/");
+        let ps_script = format!(
+            "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; \
+             $screen = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds; \
+             $bmp = New-Object System.Drawing.Bitmap $screen.Width, $screen.Height; \
+             $g = [System.Drawing.Graphics]::FromImage($bmp); \
+             $g.CopyFromScreen($screen.Location, [System.Drawing.Point]::Empty, $screen.Size); \
+             $bmp.Save('{}', [System.Drawing.Imaging.ImageFormat]::Png); \
+             $g.Dispose(); \
+             $bmp.Dispose();",
+            escaped_path
+        );
+        let _ = Command::new("powershell")
+            .args(["-NoProfile", "-NonInteractive", "-Command", &ps_script])
             .status();
 
-        if let Ok(st) = status {
-            if st.success() && raw_png_path.exists() {
-                if let Ok(meta) = std::fs::metadata(raw_png_path) {
-                    if meta.len() > 0 {
-                        success = true;
-                    }
-                }
-            }
-        }
-    } else if is_window {
-        eprintln!("[Vision] 🪟 Enfocando ventana del usuario antes de capturar...");
-        let _ = crate::windows::focus_target_user_window();
-        std::thread::sleep(std::time::Duration::from_millis(180));
-
-        eprintln!("[Vision] 📸 Capturando ventana activa con spectacle -i -a...");
-        let status = Command::new("spectacle")
-            .args(["-i", "-a", "-b", "-n", "-o", &raw_png])
-            .status();
-
-        if let Ok(st) = status {
-            if st.success() && raw_png_path.exists() {
-                if let Ok(meta) = std::fs::metadata(raw_png_path) {
-                    if meta.len() > 0 {
-                        success = true;
-                    }
+        if raw_png_path.exists() {
+            if let Ok(meta) = std::fs::metadata(raw_png_path) {
+                if meta.len() > 0 {
+                    success = true;
                 }
             }
         }
     }
 
-    // Fallback al monitor actual si no se pudo capturar ventana activa o si el modo es pantalla completa
-    if !success {
-        eprintln!("[Vision] 📸 Capturando pantalla actual con spectacle -i -m...");
-        let status = Command::new("spectacle")
-            .args(["-i", "-m", "-b", "-n", "-o", &raw_png])
-            .status()
-            .map_err(|e| format!("Error al ejecutar spectacle: {}", e))?;
+    #[cfg(not(target_os = "windows"))]
+    {
+        // 1. Ejecutar spectacle según el modo seleccionado
+        let is_region = mode == "region" || mode == "area" || mode == "rect" || mode == "recorte";
+        let is_window = mode == "active_window" || mode == "window" || mode == "ventana";
 
-        if !status.success() {
-            return Err(format!(
-                "spectacle finalizó con código de error {:?}",
-                status.code()
-            ));
+        if is_region {
+            eprintln!("[Vision] 📐 Capturando región rectangular interactiva con spectacle -r -b -k -n -o...");
+            let status = Command::new("spectacle")
+                .args(["-r", "-b", "-k", "-n", "-o", &raw_png])
+                .status();
+
+            if let Ok(st) = status {
+                if st.success() && raw_png_path.exists() {
+                    if let Ok(meta) = std::fs::metadata(raw_png_path) {
+                        if meta.len() > 0 {
+                            success = true;
+                        }
+                    }
+                }
+            }
+        } else if is_window {
+            eprintln!("[Vision] 🪟 Enfocando ventana del usuario antes de capturar...");
+            let _ = crate::windows::focus_target_user_window();
+            std::thread::sleep(std::time::Duration::from_millis(180));
+
+            eprintln!("[Vision] 📸 Capturando ventana activa con spectacle -i -a...");
+            let status = Command::new("spectacle")
+                .args(["-i", "-a", "-b", "-n", "-o", &raw_png])
+                .status();
+
+            if let Ok(st) = status {
+                if st.success() && raw_png_path.exists() {
+                    if let Ok(meta) = std::fs::metadata(raw_png_path) {
+                        if meta.len() > 0 {
+                            success = true;
+                        }
+                    }
+                }
+            }
         }
 
-        if !raw_png_path.exists() {
-            return Err("No se encontró el archivo de captura tras ejecutar spectacle.".to_string());
+        // Fallback al monitor actual si no se pudo capturar ventana activa o si el modo es pantalla completa
+        if !success {
+            eprintln!("[Vision] 📸 Capturando pantalla actual con spectacle -i -m...");
+            let status = Command::new("spectacle")
+                .args(["-i", "-m", "-b", "-n", "-o", &raw_png])
+                .status()
+                .map_err(|e| format!("Error al ejecutar spectacle: {}", e))?;
+
+            if !status.success() {
+                return Err(format!(
+                    "spectacle finalizó con código de error {:?}",
+                    status.code()
+                ));
+            }
+
+            if !raw_png_path.exists() {
+                return Err("No se encontró el archivo de captura tras ejecutar spectacle.".to_string());
+            }
         }
+    }
+
+    if !raw_png_path.exists() {
+        return Err("No se encontró el archivo de captura en disco.".to_string());
     }
 
     let raw_meta = std::fs::metadata(raw_png_path)
@@ -166,12 +202,12 @@ fn capture_and_process_screen_inner(mode: &str) -> Result<(String, String), Stri
         .status();
 
     let final_image_path = if opt_status.map(|s| s.success()).unwrap_or(false) && optimized_jpg_path.exists() {
-        let _ = std::fs::copy(&optimized_jpg, last_jpg);
+        let _ = std::fs::copy(&optimized_jpg, &last_jpg);
         optimized_jpg
     } else {
-        // Fallback: renombrar raw_png si magick no está disponible
+        // Fallback: usar raw_png si magick no está disponible
         let _ = std::fs::copy(raw_png_path, &optimized_jpg);
-        let _ = std::fs::copy(raw_png_path, last_jpg);
+        let _ = std::fs::copy(raw_png_path, &last_jpg);
         optimized_jpg
     };
 
@@ -194,7 +230,7 @@ fn capture_and_process_screen_inner(mode: &str) -> Result<(String, String), Stri
     };
 
     let thumbnail_data_url = if !thumb_bytes.is_empty() {
-        format!("data:image/jpeg;base64,{}", BASE64_STANDARD.encode(&thumb_bytes))
+        format!("data:image/png;base64,{}", BASE64_STANDARD.encode(&thumb_bytes))
     } else {
         String::new()
     };

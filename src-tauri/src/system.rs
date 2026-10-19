@@ -372,9 +372,56 @@ pub struct TelemetryData {
     pub ram_usage: f32,
     pub wifi_ssid: String,
     pub wifi_enabled: bool,
+    pub battery_level: u32,
+    pub battery_charging: bool,
 }
 
 static SYSTEM_MUTEX: Mutex<Option<System>> = Mutex::new(None);
+
+#[cfg(target_os = "windows")]
+fn get_battery_status_native() -> (u32, bool) {
+    unsafe {
+        let mut sps: windows_sys::Win32::System::Power::SYSTEM_POWER_STATUS = std::mem::zeroed();
+        if windows_sys::Win32::System::Power::GetSystemPowerStatus(&mut sps) != 0 {
+            let level = if sps.BatteryLifePercent != 255 {
+                sps.BatteryLifePercent as u32
+            } else {
+                100
+            };
+            let charging = sps.ACLineStatus == 1;
+            return (level, charging);
+        }
+    }
+    (100, true)
+}
+
+#[cfg(target_os = "linux")]
+fn get_battery_status_native() -> (u32, bool) {
+    if let Ok(entries) = std::fs::read_dir("/sys/class/power_supply") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+            if name.starts_with("BAT") {
+                let capacity = std::fs::read_to_string(path.join("capacity"))
+                    .ok()
+                    .and_then(|s| s.trim().parse::<u32>().ok())
+                    .unwrap_or(100);
+                let status = std::fs::read_to_string(path.join("status"))
+                    .ok()
+                    .map(|s| s.trim().to_lowercase())
+                    .unwrap_or_default();
+                let charging = status == "charging" || status == "full";
+                return (capacity, charging);
+            }
+        }
+    }
+    (100, true)
+}
+
+#[cfg(not(any(target_os = "windows", target_os = "linux")))]
+fn get_battery_status_native() -> (u32, bool) {
+    (100, true)
+}
 
 #[tauri::command]
 pub fn get_system_telemetry() -> TelemetryData {
@@ -410,26 +457,63 @@ pub fn get_system_telemetry() -> TelemetryData {
         }
     }
 
-    // Wi-Fi SSID from nmcli
-    let wifi_ssid = Command::new("nmcli")
-        .args(["-t", "-f", "active,ssid", "dev", "wifi"])
-        .output()
-        .map(|o| {
-            let s = String::from_utf8_lossy(&o.stdout);
-            for line in s.lines() {
-                if line.starts_with("yes:") {
-                    return line.replace("yes:", "").trim().to_string();
+    // Wi-Fi SSID
+    #[cfg(target_os = "windows")]
+    let (wifi_ssid, wifi_enabled) = {
+        let out = Command::new("netsh")
+            .args(["wlan", "show", "interfaces"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        let mut ssid = "Wi-Fi".to_string();
+        let mut connected = false;
+        for line in out.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("Estado") || trimmed.starts_with("State") {
+                if trimmed.to_lowercase().contains("conectado") || trimmed.to_lowercase().contains("connected") {
+                    connected = true;
+                }
+            } else if trimmed.starts_with("SSID") && !trimmed.starts_with("SSID de BSSID") {
+                if let Some(pos) = trimmed.find(':') {
+                    let s = trimmed[pos + 1..].trim().to_string();
+                    if !s.is_empty() {
+                        ssid = s;
+                    }
                 }
             }
-            "Conectado".to_string()
-        })
-        .unwrap_or_else(|_| "Wi-Fi".to_string());
+        }
+        if connected {
+            (ssid, true)
+        } else {
+            ("Conexión del Sistema".to_string(), true)
+        }
+    };
 
-    let wifi_enabled = Command::new("nmcli")
-        .args(["radio", "wifi"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "enabled")
-        .unwrap_or(true);
+    #[cfg(not(target_os = "windows"))]
+    let (wifi_ssid, wifi_enabled) = {
+        let wifi_ssid = Command::new("nmcli")
+            .args(["-t", "-f", "active,ssid", "dev", "wifi"])
+            .output()
+            .map(|o| {
+                let s = String::from_utf8_lossy(&o.stdout);
+                for line in s.lines() {
+                    if line.starts_with("yes:") {
+                        return line.replace("yes:", "").trim().to_string();
+                    }
+                }
+                "Conectado".to_string()
+            })
+            .unwrap_or_else(|_| "Wi-Fi".to_string());
+
+        let wifi_enabled = Command::new("nmcli")
+            .args(["radio", "wifi"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "enabled")
+            .unwrap_or(true);
+        (wifi_ssid, wifi_enabled)
+    };
+
+    let (battery_level, battery_charging) = get_battery_status_native();
 
     TelemetryData {
         cpu_usage,
@@ -441,11 +525,13 @@ pub fn get_system_telemetry() -> TelemetryData {
         ram_usage,
         wifi_ssid,
         wifi_enabled,
+        battery_level,
+        battery_charging,
     }
 }
 
 // =========================================================================
-// 4. AUDIO & MIC CONTROLS (WirePlumber / PipeWire `wpctl`)
+// 4. AUDIO & MIC CONTROLS (WirePlumber / Windows Virtual Keys)
 // =========================================================================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -455,57 +541,123 @@ pub struct AudioState {
     pub is_mic_muted: bool,
 }
 
+#[allow(dead_code)]
+static WIN_AUDIO_VOLUME: AtomicU32 = AtomicU32::new(75);
+#[allow(dead_code)]
+static WIN_AUDIO_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+#[allow(dead_code)]
+static WIN_MIC_MUTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 #[tauri::command]
 pub fn get_audio_status() -> AudioState {
-    let out = Command::new("wpctl")
-        .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
+    #[cfg(target_os = "windows")]
+    {
+        return AudioState {
+            volume: WIN_AUDIO_VOLUME.load(Ordering::Relaxed),
+            is_muted: WIN_AUDIO_MUTED.load(Ordering::Relaxed),
+            is_mic_muted: WIN_MIC_MUTED.load(Ordering::Relaxed),
+        };
+    }
 
-    // Output format: Volume: 0.50 [MUTED]
-    let is_muted = out.contains("[MUTED]");
-    let num_part = out.replace("Volume:", "").replace("[MUTED]", "").trim().to_string();
-    let vol_float = num_part.parse::<f32>().unwrap_or(0.5);
-    let volume = (vol_float * 100.0).round() as u32;
+    #[cfg(not(target_os = "windows"))]
+    {
+        let out = Command::new("wpctl")
+            .args(["get-volume", "@DEFAULT_AUDIO_SINK@"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
 
-    let mic_out = Command::new("wpctl")
-        .args(["get-volume", "@DEFAULT_AUDIO_SOURCE@"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
-    let is_mic_muted = mic_out.contains("[MUTED]");
+        // Output format: Volume: 0.50 [MUTED]
+        let is_muted = out.contains("[MUTED]");
+        let num_part = out.replace("Volume:", "").replace("[MUTED]", "").trim().to_string();
+        let vol_float = num_part.parse::<f32>().unwrap_or(0.5);
+        let volume = (vol_float * 100.0).round() as u32;
 
-    AudioState {
-        volume,
-        is_muted,
-        is_mic_muted,
+        let mic_out = Command::new("wpctl")
+            .args(["get-volume", "@DEFAULT_AUDIO_SOURCE@"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+        let is_mic_muted = mic_out.contains("[MUTED]");
+
+        AudioState {
+            volume,
+            is_muted,
+            is_mic_muted,
+        }
     }
 }
 
 #[tauri::command]
 pub fn toggle_audio_mute() -> Result<AudioState, String> {
-    let _ = Command::new("wpctl")
-        .args(["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
-        .status();
-    Ok(get_audio_status())
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYEVENTF_KEYUP, VK_VOLUME_MUTE};
+        unsafe {
+            keybd_event(VK_VOLUME_MUTE as u8, 0, 0, 0);
+            keybd_event(VK_VOLUME_MUTE as u8, 0, KEYEVENTF_KEYUP, 0);
+        }
+        let cur = WIN_AUDIO_MUTED.load(Ordering::Relaxed);
+        WIN_AUDIO_MUTED.store(!cur, Ordering::Relaxed);
+        return Ok(get_audio_status());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("wpctl")
+            .args(["set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"])
+            .status();
+        Ok(get_audio_status())
+    }
 }
 
 #[tauri::command]
 pub fn toggle_mic_mute() -> Result<AudioState, String> {
-    let _ = Command::new("wpctl")
-        .args(["set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
-        .status();
-    Ok(get_audio_status())
+    #[cfg(target_os = "windows")]
+    {
+        let cur = WIN_MIC_MUTED.load(Ordering::Relaxed);
+        WIN_MIC_MUTED.store(!cur, Ordering::Relaxed);
+        return Ok(get_audio_status());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("wpctl")
+            .args(["set-mute", "@DEFAULT_AUDIO_SOURCE@", "toggle"])
+            .status();
+        Ok(get_audio_status())
+    }
 }
 
 #[tauri::command]
 pub fn set_audio_volume(percent: u32) -> Result<AudioState, String> {
-    let frac = (percent as f32 / 100.0).min(1.0).max(0.0);
-    let _ = Command::new("wpctl")
-        .args(["set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{:.2}", frac)])
-        .status();
-    Ok(get_audio_status())
+    let clamped = percent.min(100);
+
+    #[cfg(target_os = "windows")]
+    {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYEVENTF_KEYUP, VK_VOLUME_DOWN, VK_VOLUME_UP};
+        let cur = WIN_AUDIO_VOLUME.load(Ordering::Relaxed);
+        let diff = (clamped as i32) - (cur as i32);
+        let steps = (diff.abs() / 2).max(1);
+        let vk = if diff > 0 { VK_VOLUME_UP } else { VK_VOLUME_DOWN };
+        for _ in 0..steps {
+            unsafe {
+                keybd_event(vk as u8, 0, 0, 0);
+                keybd_event(vk as u8, 0, KEYEVENTF_KEYUP, 0);
+            }
+        }
+        WIN_AUDIO_VOLUME.store(clamped, Ordering::Relaxed);
+        return Ok(get_audio_status());
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let frac = (clamped as f32 / 100.0).min(1.0).max(0.0);
+        let _ = Command::new("wpctl")
+            .args(["set-volume", "@DEFAULT_AUDIO_SINK@", &format!("{:.2}", frac)])
+            .status();
+        Ok(get_audio_status())
+    }
 }
 
 // =========================================================================
@@ -1043,58 +1195,128 @@ pub fn get_system_apps() -> Vec<AppEntry> {
     apps
 }
 
-/// Returns recently accessed native files from FreeDesktop ~/.local/share/recently-used.xbel
+/// Returns recently accessed native files from Windows Recent or FreeDesktop ~/.local/share/recently-used.xbel
 #[tauri::command]
 pub fn get_recent_documents() -> Vec<RecentDocEntry> {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let xbel_path = format!("{}/.local/share/recently-used.xbel", home);
-    let mut docs = Vec::new();
-    let mut seen = std::collections::HashSet::new();
+    #[cfg(target_os = "windows")]
+    {
+        let mut docs = Vec::new();
+        let mut seen = std::collections::HashSet::new();
 
-    if let Ok(content) = std::fs::read_to_string(&xbel_path) {
-        // Collect matches in reverse to get most recent first
-        let mut bookmarks: Vec<&str> = content.lines().filter(|l| l.contains("<bookmark href=\"file://")).collect();
-        bookmarks.reverse();
+        // 1. Scan %APPDATA%\Microsoft\Windows\Recent
+        if let Some(appdata) = dirs::data_dir() {
+            let recent_dir = appdata.join("Microsoft").join("Windows").join("Recent");
+            if let Ok(entries) = std::fs::read_dir(recent_dir) {
+                let mut file_entries: Vec<_> = entries.flatten().collect();
+                file_entries.sort_by_key(|e| e.metadata().and_then(|m| m.modified()).unwrap_or(std::time::SystemTime::UNIX_EPOCH));
+                file_entries.reverse();
 
-        for line in bookmarks {
-            if let Some(start) = line.find("href=\"file://") {
-                let rem = &line[start + 13..];
-                if let Some(end) = rem.find('"') {
-                    let raw_url = &rem[..end];
-                    // Percent decode URL (e.g. %20 -> space)
-                    let decoded_path = url::form_urlencoded::parse(raw_url.as_bytes())
-                        .map(|(k, _)| k.to_string())
-                        .collect::<Vec<String>>()
-                        .join("");
-                    let real_path = if decoded_path.is_empty() { raw_url.to_string() } else { decoded_path };
+                for entry in file_entries {
+                    let path = entry.path();
+                    let file_name = path.file_stem().and_then(|s| s.to_str()).unwrap_or_default().to_string();
+                    if file_name.is_empty() || seen.contains(&file_name) {
+                        continue;
+                    }
+                    seen.insert(file_name.clone());
+                    let p_str = path.to_string_lossy().to_string();
+                    docs.push(RecentDocEntry {
+                        name: file_name,
+                        path: p_str,
+                        is_dir: false,
+                    });
+                    if docs.len() >= 25 {
+                        break;
+                    }
+                }
+            }
+        }
 
-                    let p = std::path::Path::new(&real_path);
-                    if p.exists() && !seen.contains(&real_path) {
-                        seen.insert(real_path.clone());
-                        let is_dir = p.is_dir();
-                        let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or(&real_path).to_string();
-                        docs.push(RecentDocEntry {
-                            name: file_name,
-                            path: real_path,
-                            is_dir,
-                        });
-                        if docs.len() >= 25 {
-                            break;
+        // 2. Fallback to Documents if Recent folder was empty
+        if docs.is_empty() {
+            if let Some(docs_dir) = dirs::document_dir() {
+                if let Ok(entries) = std::fs::read_dir(docs_dir) {
+                    for entry in entries.flatten() {
+                        let p = entry.path();
+                        if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+                            if !name.starts_with('.') && !seen.contains(name) {
+                                seen.insert(name.to_string());
+                                docs.push(RecentDocEntry {
+                                    name: name.to_string(),
+                                    path: p.to_string_lossy().to_string(),
+                                    is_dir: p.is_dir(),
+                                });
+                                if docs.len() >= 25 { break; }
+                            }
                         }
                     }
                 }
             }
         }
+
+        return docs;
     }
 
-    docs
+    #[cfg(not(target_os = "windows"))]
+    {
+        let home = std::env::var("HOME").unwrap_or_default();
+        let xbel_path = format!("{}/.local/share/recently-used.xbel", home);
+        let mut docs = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        if let Ok(content) = std::fs::read_to_string(&xbel_path) {
+            // Collect matches in reverse to get most recent first
+            let mut bookmarks: Vec<&str> = content.lines().filter(|l| l.contains("<bookmark href=\"file://")).collect();
+            bookmarks.reverse();
+
+            for line in bookmarks {
+                if let Some(start) = line.find("href=\"file://") {
+                    let rem = &line[start + 13..];
+                    if let Some(end) = rem.find('"') {
+                        let raw_url = &rem[..end];
+                        // Percent decode URL (e.g. %20 -> space)
+                        let decoded_path = url::form_urlencoded::parse(raw_url.as_bytes())
+                            .map(|(k, _)| k.to_string())
+                            .collect::<Vec<String>>()
+                            .join("");
+                        let real_path = if decoded_path.is_empty() { raw_url.to_string() } else { decoded_path };
+
+                        let p = std::path::Path::new(&real_path);
+                        if p.exists() && !seen.contains(&real_path) {
+                            seen.insert(real_path.clone());
+                            let is_dir = p.is_dir();
+                            let file_name = p.file_name().and_then(|s| s.to_str()).unwrap_or(&real_path).to_string();
+                            docs.push(RecentDocEntry {
+                                name: file_name,
+                                path: real_path,
+                                is_dir,
+                            });
+                            if docs.len() >= 25 {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        docs
+    }
 }
 
-/// Opens any file or folder with the default Linux application (xdg-open)
+/// Opens any file or folder with the default application (open::that / xdg-open)
 #[tauri::command]
 pub fn open_native_path(path: String) -> Result<bool, String> {
-    let _ = Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
-    Ok(true)
+    #[cfg(target_os = "windows")]
+    {
+        open::that(&path).map_err(|e| e.to_string())?;
+        return Ok(true);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = Command::new("xdg-open").arg(&path).spawn().map_err(|e| e.to_string())?;
+        Ok(true)
+    }
 }
 
 /// Runs a terminal command inside Konsole, PowerShell, or native shell
@@ -1397,135 +1619,264 @@ pub struct NetworkDetails {
 
 #[tauri::command]
 pub fn get_detailed_network_status() -> NetworkDetails {
-    let dev_status = Command::new("nmcli")
-        .args(["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status"])
-        .output()
-        .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
-        .unwrap_or_default();
+    #[cfg(target_os = "windows")]
+    {
+        let mut conn_type = "ethernet".to_string();
+        let mut state = "connected".to_string();
+        let mut device = "Ethernet".to_string();
+        let mut name = "Conexión Cableada".to_string();
+        let mut speed_label = "1.0 Gbps".to_string();
+        let mut ip_address = "127.0.0.1".to_string();
+        let mut wifi_networks = Vec::new();
 
-    let mut conn_type = "none".to_string();
-    let mut state = "disconnected".to_string();
-    let mut device = "".to_string();
-    let mut name = "Sin conexión".to_string();
-    let mut speed_label = "0 Mbps".to_string();
-    let mut ip_address = "".to_string();
-    let mut wifi_networks = Vec::new();
-
-    // Check lines for connected devices
-    for line in dev_status.lines() {
-        let parts: Vec<&str> = line.split(':').collect();
-        if parts.len() >= 4 {
-            let dev = parts[0].trim();
-            let dtype = parts[1].trim();
-            let dstate = parts[2].trim();
-            let conn = parts[3].trim();
-
-            if (dstate == "connected" || dstate == "conectado") && dtype != "loopback" {
-                if dtype == "ethernet" {
-                    conn_type = "ethernet".to_string();
-                    state = "connected".to_string();
-                    device = dev.to_string();
-                    name = if !conn.is_empty() { conn.to_string() } else { "Conexión Cableada".to_string() };
-
-                    // Read interface speed
-                    let speed_path = format!("/sys/class/net/{}/speed", dev);
-                    if let Ok(raw_speed) = std::fs::read_to_string(&speed_path) {
-                        if let Ok(mbps) = raw_speed.trim().parse::<u32>() {
-                            if mbps >= 1000 {
-                                speed_label = format!("{:.1} Gbps", mbps as f32 / 1000.0);
-                            } else {
-                                speed_label = format!("{} Mbps", mbps);
-                            }
-                        } else {
-                            speed_label = "1.0 Gbps".to_string();
-                        }
-                    } else {
-                        speed_label = "1.0 Gbps".to_string();
-                    }
-
-                    // Query IP
-                    if let Ok(out) = Command::new("nmcli").args(["-g", "IP4.ADDRESS", "dev", "show", dev]).output() {
-                        let ip = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                        ip_address = ip.split('/').next().unwrap_or("").to_string();
-                    }
-                    break;
-                } else if dtype == "wifi" && conn_type != "ethernet" {
-                    conn_type = "wifi".to_string();
-                    state = "connected".to_string();
-                    device = dev.to_string();
-                    name = if !conn.is_empty() { conn.to_string() } else { "Wi-Fi".to_string() };
-                    speed_label = "300 Mbps".to_string();
-
-                    // Query IP
-                    if let Ok(out) = Command::new("nmcli").args(["-g", "IP4.ADDRESS", "dev", "show", dev]).output() {
-                        let ip = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                        ip_address = ip.split('/').next().unwrap_or("").to_string();
-                    }
-                }
-            }
-        }
-    }
-
-    // Only query Wi-Fi list if not ethernet or if wifi is the primary interface
-    if conn_type != "ethernet" {
-        let wifi_out = Command::new("nmcli")
-            .args(["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list"])
+        // 1. Check wlan interfaces
+        let wlan_out = Command::new("netsh")
+            .args(["wlan", "show", "interfaces"])
             .output()
             .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
             .unwrap_or_default();
 
-        for line in wifi_out.lines() {
-            let parts: Vec<&str> = line.split(':').collect();
-            if parts.len() >= 4 {
-                let in_use = parts[0].trim() == "*";
-                let ssid = parts[1].trim().to_string();
-                let signal = parts[2].trim().parse::<u32>().unwrap_or(0);
-                let security = parts[3].trim().to_string();
+        let mut is_wlan_connected = false;
+        let mut current_ssid = String::new();
+        let mut rx_rate = String::new();
 
-                if !ssid.is_empty() && !wifi_networks.iter().any(|w: &WifiNetworkItem| w.ssid == ssid) {
-                    wifi_networks.push(WifiNetworkItem {
-                        in_use,
-                        ssid,
-                        signal,
-                        security,
-                    });
+        for line in wlan_out.lines() {
+            let t = line.trim();
+            if (t.starts_with("Estado") || t.starts_with("State")) && (t.to_lowercase().contains("conectado") || t.to_lowercase().contains("connected")) {
+                is_wlan_connected = true;
+            } else if t.starts_with("SSID") && !t.starts_with("SSID de BSSID") {
+                if let Some(pos) = t.find(':') {
+                    let s = t[pos + 1..].trim();
+                    if !s.is_empty() { current_ssid = s.to_string(); }
+                }
+            } else if t.starts_with("Velocidad de recepción") || t.starts_with("Receive rate") {
+                if let Some(pos) = t.find(':') {
+                    rx_rate = t[pos + 1..].trim().to_string();
                 }
             }
         }
+
+        if is_wlan_connected && !current_ssid.is_empty() {
+            conn_type = "wifi".to_string();
+            state = "connected".to_string();
+            device = "Wi-Fi".to_string();
+            name = current_ssid.clone();
+            if !rx_rate.is_empty() {
+                speed_label = format!("{} Mbps", rx_rate);
+            } else {
+                speed_label = "300 Mbps".to_string();
+            }
+        }
+
+        // 2. Discover available Wi-Fi networks via netsh
+        let networks_out = Command::new("netsh")
+            .args(["wlan", "show", "networks"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+
+        let mut pending_ssid = String::new();
+        for line in networks_out.lines() {
+            let t = line.trim();
+            if t.starts_with("SSID") && !t.starts_with("SSID de BSSID") {
+                if let Some(pos) = t.find(':') {
+                    let s = t[pos + 1..].trim().to_string();
+                    if !s.is_empty() {
+                        pending_ssid = s;
+                    }
+                }
+            } else if t.starts_with("Autenticación") || t.starts_with("Authentication") {
+                if !pending_ssid.is_empty() {
+                    let sec = t.split(':').nth(1).unwrap_or("WPA2").trim().to_string();
+                    let in_use = pending_ssid == current_ssid;
+                    wifi_networks.push(WifiNetworkItem {
+                        in_use,
+                        ssid: pending_ssid.clone(),
+                        signal: if in_use { 90 } else { 70 },
+                        security: sec,
+                    });
+                    pending_ssid.clear();
+                }
+            }
+        }
+
+        // 3. Fallback IP address
+        if let Ok(ip_out) = Command::new("powershell").args(["-NoProfile", "-Command", "(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notlike '*Loopback*' -and $_.IPAddress -notlike '169.254*' }).IPAddress | Select-Object -First 1"]).output() {
+            let ip = String::from_utf8_lossy(&ip_out.stdout).trim().to_string();
+            if !ip.is_empty() {
+                ip_address = ip;
+            }
+        }
+
+        return NetworkDetails {
+            conn_type,
+            state,
+            device,
+            name,
+            speed_label,
+            ip_address,
+            wifi_networks,
+        };
     }
 
-    NetworkDetails {
-        conn_type,
-        state,
-        device,
-        name,
-        speed_label,
-        ip_address,
-        wifi_networks,
+    #[cfg(not(target_os = "windows"))]
+    {
+        let dev_status = Command::new("nmcli")
+            .args(["-t", "-f", "DEVICE,TYPE,STATE,CONNECTION", "dev", "status"])
+            .output()
+            .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+            .unwrap_or_default();
+
+        let mut conn_type = "none".to_string();
+        let mut state = "disconnected".to_string();
+        let mut device = "".to_string();
+        let mut name = "Sin conexión".to_string();
+        let mut speed_label = "0 Mbps".to_string();
+        let mut ip_address = "".to_string();
+        let mut wifi_networks = Vec::new();
+
+        // Check lines for connected devices
+        for line in dev_status.lines() {
+            let parts: Vec<&str> = line.split(':').collect();
+            if parts.len() >= 4 {
+                let dev = parts[0].trim();
+                let dtype = parts[1].trim();
+                let dstate = parts[2].trim();
+                let conn = parts[3].trim();
+
+                if (dstate == "connected" || dstate == "conectado") && dtype != "loopback" {
+                    if dtype == "ethernet" {
+                        conn_type = "ethernet".to_string();
+                        state = "connected".to_string();
+                        device = dev.to_string();
+                        name = if !conn.is_empty() { conn.to_string() } else { "Conexión Cableada".to_string() };
+
+                        // Read interface speed
+                        let speed_path = format!("/sys/class/net/{}/speed", dev);
+                        if let Ok(raw_speed) = std::fs::read_to_string(&speed_path) {
+                            if let Ok(mbps) = raw_speed.trim().parse::<u32>() {
+                                if mbps >= 1000 {
+                                    speed_label = format!("{:.1} Gbps", mbps as f32 / 1000.0);
+                                } else {
+                                    speed_label = format!("{} Mbps", mbps);
+                                }
+                            } else {
+                                speed_label = "1.0 Gbps".to_string();
+                            }
+                        } else {
+                            speed_label = "1.0 Gbps".to_string();
+                        }
+
+                        // Query IP
+                        if let Ok(out) = Command::new("nmcli").args(["-g", "IP4.ADDRESS", "dev", "show", dev]).output() {
+                            let ip = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                            ip_address = ip.split('/').next().unwrap_or("").to_string();
+                        }
+                        break;
+                    } else if dtype == "wifi" && conn_type != "ethernet" {
+                        conn_type = "wifi".to_string();
+                        state = "connected".to_string();
+                        device = dev.to_string();
+                        name = if !conn.is_empty() { conn.to_string() } else { "Wi-Fi".to_string() };
+                        speed_label = "300 Mbps".to_string();
+
+                        // Query IP
+                        if let Ok(out) = Command::new("nmcli").args(["-g", "IP4.ADDRESS", "dev", "show", dev]).output() {
+                            let ip = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                            ip_address = ip.split('/').next().unwrap_or("").to_string();
+                        }
+                    }
+                }
+            }
+        }
+
+        // Only query Wi-Fi list if not ethernet or if wifi is the primary interface
+        if conn_type != "ethernet" {
+            let wifi_out = Command::new("nmcli")
+                .args(["-t", "-f", "IN-USE,SSID,SIGNAL,SECURITY", "dev", "wifi", "list"])
+                .output()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .unwrap_or_default();
+
+            for line in wifi_out.lines() {
+                let parts: Vec<&str> = line.split(':').collect();
+                if parts.len() >= 4 {
+                    let in_use = parts[0].trim() == "*";
+                    let ssid = parts[1].trim().to_string();
+                    let signal = parts[2].trim().parse::<u32>().unwrap_or(0);
+                    let security = parts[3].trim().to_string();
+
+                    if !ssid.is_empty() && !wifi_networks.iter().any(|w: &WifiNetworkItem| w.ssid == ssid) {
+                        wifi_networks.push(WifiNetworkItem {
+                            in_use,
+                            ssid,
+                            signal,
+                            security,
+                        });
+                    }
+                }
+            }
+        }
+
+        NetworkDetails {
+            conn_type,
+            state,
+            device,
+            name,
+            speed_label,
+            ip_address,
+            wifi_networks,
+        }
     }
 }
 
 #[tauri::command]
 pub fn connect_wifi_network(ssid: String, password: Option<String>) -> Result<bool, String> {
-    let mut cmd = Command::new("nmcli");
-    cmd.args(["dev", "wifi", "connect", &ssid]);
-    if let Some(pwd) = password {
-        if !pwd.is_empty() {
-            cmd.args(["password", &pwd]);
-        }
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("netsh")
+            .args(["wlan", "connect", &format!("name=\"{}\"", ssid)])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        return Ok(status);
     }
-    let status = cmd.status().map(|s| s.success()).unwrap_or(false);
-    Ok(status)
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut cmd = Command::new("nmcli");
+        cmd.args(["dev", "wifi", "connect", &ssid]);
+        if let Some(pwd) = password {
+            if !pwd.is_empty() {
+                cmd.args(["password", &pwd]);
+            }
+        }
+        let status = cmd.status().map(|s| s.success()).unwrap_or(false);
+        Ok(status)
+    }
 }
 
 #[tauri::command]
 pub fn disconnect_network(device: String) -> Result<bool, String> {
-    let status = Command::new("nmcli")
-        .args(["dev", "disconnect", &device])
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false);
-    Ok(status)
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("netsh")
+            .args(["wlan", "disconnect"])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        return Ok(status);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let status = Command::new("nmcli")
+            .args(["dev", "disconnect", &device])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false);
+        Ok(status)
+    }
 }
 
 // =========================================================================
