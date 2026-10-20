@@ -319,7 +319,7 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
         
         let monitor = window.current_monitor().ok().flatten()
             .or_else(|| window.primary_monitor().ok().flatten())
-            .or_else(|| window.available_monitors().ok().and_then(|mut m| m.next()));
+            .or_else(|| window.available_monitors().ok().and_then(|m| m.into_iter().next()));
 
         if let Some(mon) = monitor {
             let size = mon.size();
