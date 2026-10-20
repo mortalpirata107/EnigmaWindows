@@ -58,9 +58,9 @@ mod linux_shortcuts {
                                                     if meta_pressed && !meta_combined {
                                                         eprintln!("[GlobalShortcut] evdev detected Super/Windows key pressed alone! Emitting toggle-launcher");
                                                         if let Some(dock_win) = app.get_webview_window("dock") {
+                                                            let _ = crate::window_strut::set_keyboard_interactivity(dock_win.clone(), true, Some("evdev_win_key".into()));
                                                             let _ = dock_win.set_focus();
                                                         }
-                                                        let _ = app.emit_to("dock", "toggle-launcher", ());
                                                         let _ = app.emit("toggle-launcher", ());
                                                     }
                                                     meta_pressed = false;
@@ -72,14 +72,11 @@ mod linux_shortcuts {
                                                 if alt_pressed && value == 1 {
                                                     if last_search_time.elapsed() >= Duration::from_millis(250) {
                                                         last_search_time = std::time::Instant::now();
-                                                        eprintln!("[GlobalShortcut] evdev detected ALT + Space! Emitting trigger-search");
+                                                        eprintln!("[GlobalShortcut] evdev detected ALT + Space! Emitting toggle-search");
                                                         if let Some(main_win) = app.get_webview_window("main") {
+                                                            let _ = crate::window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("evdev_alt_space".into()));
                                                             let _ = main_win.set_focus();
                                                         }
-                                                        let _ = app.emit_to("main", "trigger-search", ());
-                                                        let _ = app.emit("trigger-search", ());
-                                                        let _ = app.emit_to("main", "open-search", ());
-                                                        let _ = app.emit("open-search", ());
                                                         let _ = app.emit("toggle-search", ());
                                                     }
                                                 }
@@ -87,18 +84,18 @@ mod linux_shortcuts {
                                                 if (alt_pressed || ctrl_pressed) && value == 1 {
                                                     eprintln!("[GlobalShortcut] evdev detected ALT + 3! Emitting toggle-enigma");
                                                     if let Some(main_win) = app.get_webview_window("main") {
+                                                        let _ = crate::window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("evdev_alt_3".into()));
                                                         let _ = main_win.set_focus();
                                                     }
-                                                    let _ = app.emit_to("main", "toggle-enigma", ());
                                                     let _ = app.emit("toggle-enigma", ());
                                                 }
                                             } else if code == Key::KEY_V.code() {
                                                 if alt_pressed && value == 1 {
                                                     eprintln!("[GlobalShortcut] evdev detected ALT + V! Emitting open-clipboard-history");
                                                     if let Some(main_win) = app.get_webview_window("main") {
+                                                        let _ = crate::window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("evdev_alt_v".into()));
                                                         let _ = main_win.set_focus();
                                                     }
-                                                    let _ = app.emit_to("main", "open-clipboard-history", ());
                                                     let _ = app.emit("open-clipboard-history", ());
                                                 }
                                             }
@@ -156,7 +153,7 @@ mod windows_shortcuts {
     use tauri::{AppHandle, Emitter, Manager};
     use windows_sys::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
     use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
-        GetAsyncKeyState, VK_LWIN, VK_RWIN, VK_MENU, VK_LMENU, VK_RMENU, VK_SPACE,
+        GetAsyncKeyState, keybd_event, KEYEVENTF_KEYUP, VK_LWIN, VK_RWIN, VK_MENU, VK_LMENU, VK_RMENU, VK_SPACE,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
@@ -190,6 +187,11 @@ mod windows_shortcuts {
             let is_down = msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN;
             let is_up = msg == WM_KEYUP || msg == WM_SYSKEYUP;
 
+            // Ignorar teclas inyectadas por el sistema o nuestra propia tecla máscara (0xE8)
+            if (kbd.flags & 0x10) != 0 || vk == 0xE8 {
+                return CallNextHookEx(0, n_code, w_param, l_param);
+            }
+
             // 1. Rastrear pulsación de teclas ALT (Izquierda, Derecha o Genérica)
             if vk == VK_MENU || vk == VK_LMENU || vk == VK_RMENU {
                 ALT_KEY_DOWN.store(is_down, Ordering::SeqCst);
@@ -201,7 +203,7 @@ mod windows_shortcuts {
 
             // 2. Interceptar Alt + Espacio (Notch Search)
             // Windows reserva normalmente Alt+Espacio para el menú del sistema (SC_KEYMENU);
-            // interceptarlo a nivel LL suprime el bloqueo del shell y abre la búsqueda al instante.
+            // interceptarlo a nivel LL suprime el bloqueo del shell y conmuta la búsqueda al instante.
             if vk == VK_SPACE && alt_is_pressed {
                 if is_down {
                     let now = current_timestamp_ms();
@@ -209,28 +211,23 @@ mod windows_shortcuts {
                     if now.saturating_sub(last) >= 250 {
                         LAST_SHORTCUT_TICK.store(now, Ordering::SeqCst);
                         if let Some(app) = HOOK_APP_HANDLE.get() {
-                            eprintln!("[GlobalShortcut:WinHook] Intercepted Alt+Space! Focusing main and triggering Notch Search");
+                            eprintln!("[GlobalShortcut:WinHook] Intercepted Alt+Space! Focusing main and toggling Notch Search");
                             if let Some(main_win) = app.get_webview_window("main") {
-                                crate::window_strut::set_window_interactive_mode("main", true);
-                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = crate::window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("win_hook_alt_space".into()));
                                 let _ = main_win.set_focus();
                             }
-                            let _ = app.emit_to("main", "trigger-search", ());
-                            let _ = app.emit("trigger-search", ());
-                            let _ = app.emit_to("main", "open-search", ());
-                            let _ = app.emit("open-search", ());
                             let _ = app.emit("toggle-search", ());
                         }
                     }
-                    return 1; // Suprimir menú nativo de Windows
+                    return 1; // Suprimir menú nativo de Windows (SC_KEYMENU)
                 } else if is_up {
                     return 1;
                 }
             }
 
             // 3. Interceptar Alt + 3 (Enigma AI Hub)
-            // 0x33 es el Virtual Key Code Win32 para la tecla '3'
-            if vk == 0x33 && alt_is_pressed {
+            // 0x33 es el Virtual Key Code Win32 para la tecla '3' (fila superior) y 0x63 para '3' (teclado numérico)
+            if (vk == 0x33 || vk == 0x63) && alt_is_pressed {
                 if is_down {
                     let now = current_timestamp_ms();
                     let last = LAST_SHORTCUT_TICK.load(Ordering::SeqCst);
@@ -239,11 +236,9 @@ mod windows_shortcuts {
                         if let Some(app) = HOOK_APP_HANDLE.get() {
                             eprintln!("[GlobalShortcut:WinHook] Intercepted Alt+3! Focusing main and toggling Enigma Hub");
                             if let Some(main_win) = app.get_webview_window("main") {
-                                crate::window_strut::set_window_interactive_mode("main", true);
-                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = crate::window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("win_hook_alt_3".into()));
                                 let _ = main_win.set_focus();
                             }
-                            let _ = app.emit_to("main", "toggle-enigma", ());
                             let _ = app.emit("toggle-enigma", ());
                         }
                     }
@@ -264,11 +259,9 @@ mod windows_shortcuts {
                         if let Some(app) = HOOK_APP_HANDLE.get() {
                             eprintln!("[GlobalShortcut:WinHook] Intercepted Alt+V! Focusing main and opening Clipboard History");
                             if let Some(main_win) = app.get_webview_window("main") {
-                                crate::window_strut::set_window_interactive_mode("main", true);
-                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = crate::window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("win_hook_alt_v".into()));
                                 let _ = main_win.set_focus();
                             }
-                            let _ = app.emit_to("main", "open-clipboard-history", ());
                             let _ = app.emit("open-clipboard-history", ());
                         }
                     }
@@ -289,18 +282,20 @@ mod windows_shortcuts {
                     let was_down = WIN_KEY_DOWN.swap(false, Ordering::SeqCst);
                     let combined = WIN_KEY_COMBINED.swap(false, Ordering::SeqCst);
                     if was_down && !combined {
+                        // Inyectar tecla máscara para prevenir la apertura del Menú de Inicio en Windows Shell (explorer.exe)
+                        keybd_event(0xE8, 0, 0, 0);
+                        keybd_event(0xE8, 0, KEYEVENTF_KEYUP, 0);
+
                         // El usuario presionó y soltó únicamente la tecla Windows: abrir/conmutar Enigma Launcher
                         if let Some(app) = HOOK_APP_HANDLE.get() {
                             eprintln!("[GlobalShortcut:WinHook] Windows key pressed alone! Toggling Enigma Launcher");
                             if let Some(dock_win) = app.get_webview_window("dock") {
-                                crate::window_strut::set_window_interactive_mode("dock", true);
-                                let _ = dock_win.set_ignore_cursor_events(false);
+                                let _ = crate::window_strut::set_keyboard_interactivity(dock_win.clone(), true, Some("win_hook_launcher".into()));
                                 let _ = dock_win.set_focus();
                             }
-                            let _ = app.emit_to("dock", "toggle-launcher", ());
                             let _ = app.emit("toggle-launcher", ());
                         }
-                        // Suprime el menú de inicio nativo de Windows
+                        // Suprime el menú de inicio nativo de Windows sin bloquear la tecla
                         return 1;
                     }
                 }

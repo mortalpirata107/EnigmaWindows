@@ -375,4 +375,13 @@ mod tests {
         let path = get_core_memory_path();
         assert!(path.to_string_lossy().contains("enigma_core.md"));
     }
+
+    #[test]
+    fn test_user_profile_persistence() {
+        let _ = crate::db::init_db();
+        let res = save_user_name("Operador_Test");
+        assert!(res.is_ok());
+        let current = get_current_user_name();
+        assert_eq!(current, "Operador_Test");
+    }
 }

@@ -270,34 +270,25 @@ fn main() {
                     if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
                         let sc_str = format!("{:?}", shortcut).to_lowercase();
                         if sc_str.contains("space") {
-                            eprintln!("[GlobalShortcut:Plugin] Alt+Space pressed! Emitting trigger-search");
+                            eprintln!("[GlobalShortcut:Plugin] Alt+Space pressed! Emitting toggle-search");
                             if let Some(main_win) = app.get_webview_window("main") {
-                                window_strut::set_window_interactive_mode("main", true);
-                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("plugin_alt_space".into()));
                                 let _ = main_win.set_focus();
                             }
-                            let _ = app.emit_to("main", "trigger-search", ());
-                            let _ = app.emit("trigger-search", ());
-                            let _ = app.emit_to("main", "open-search", ());
-                            let _ = app.emit("open-search", ());
                             let _ = app.emit("toggle-search", ());
                         } else if sc_str.contains("keyv") || sc_str.contains("v") {
                             eprintln!("[GlobalShortcut:Plugin] Alt+V pressed! Emitting open-clipboard-history");
                             if let Some(main_win) = app.get_webview_window("main") {
-                                window_strut::set_window_interactive_mode("main", true);
-                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("plugin_alt_v".into()));
                                 let _ = main_win.set_focus();
                             }
-                            let _ = app.emit_to("main", "open-clipboard-history", ());
                             let _ = app.emit("open-clipboard-history", ());
                         } else if sc_str.contains("digit3") || sc_str.contains("3") {
                             eprintln!("[GlobalShortcut:Plugin] Alt+3 pressed! Emitting toggle-enigma");
                             if let Some(main_win) = app.get_webview_window("main") {
-                                window_strut::set_window_interactive_mode("main", true);
-                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = window_strut::set_keyboard_interactivity(main_win.clone(), true, Some("plugin_alt_3".into()));
                                 let _ = main_win.set_focus();
                             }
-                            let _ = app.emit_to("main", "toggle-enigma", ());
                             let _ = app.emit("toggle-enigma", ());
                         } else {
                             eprintln!("[GlobalShortcut:Plugin] Shortcut pressed: {:?}", shortcut);

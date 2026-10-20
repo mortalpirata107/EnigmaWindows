@@ -200,10 +200,14 @@ export const BottomDock: React.FC = () => {
     invoke<boolean>('set_windows_taskbar_visible', { visible: false }).catch(() => {});
   }, []);
 
-  // Escuchar conmutación del selector de apps desde tecla Windows / atajo global
+  // Escuchar conmutación del selector de apps desde tecla Windows / atajo global con debounce
+  const lastLauncherToggleRef = useRef<number>(0);
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listen('toggle-launcher', () => {
+      const now = Date.now();
+      if (now - lastLauncherToggleRef.current < 250) return;
+      lastLauncherToggleRef.current = now;
       setIsHovered(true);
       setIsLauncherOpen((prev) => !prev);
     }).then(u => { unlisten = u; }).catch(() => {});

@@ -79,13 +79,18 @@ export const OllamaSetupCard: React.FC<OllamaSetupCardProps> = ({
 }) => {
   const [selectedPresetId, setSelectedPresetId] = useState<string>('equilibrado');
   const [customCommand, setCustomCommand] = useState<string>('ollama run deepseek-r1:14b');
+  const [highModelChoice, setHighModelChoice] = useState<'hermes3:8b' | 'qwen2.5:14b'>('hermes3:8b');
   const [copiedCommand, setCopiedCommand] = useState<string | null>(null);
   const [runningCommand, setRunningCommand] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   const selectedPreset = PRESETS.find((p) => p.id === selectedPresetId) || PRESETS[1];
   const effectiveCommand =
-    selectedPresetId === 'personalizado' ? customCommand.trim() : selectedPreset.command;
+    selectedPresetId === 'personalizado'
+      ? customCommand.trim()
+      : selectedPresetId === 'alto'
+      ? `ollama run ${highModelChoice}`
+      : selectedPreset.command;
 
   const handleCopy = async (cmd: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -247,41 +252,81 @@ export const OllamaSetupCard: React.FC<OllamaSetupCardProps> = ({
                 {preset.description}
               </div>
 
-              {preset.id !== 'personalizado' ? (
-                <div className="mt-1 flex items-center justify-between gap-1 pt-1.5 border-t border-white/5">
-                  <code className="text-[10px] font-mono text-white/90 truncate bg-black/40 px-1.5 py-0.5 rounded border border-white/5">
-                    {preset.command}
-                  </code>
-                  <div className="flex items-center gap-1 shrink-0">
-                    <button
-                      type="button"
-                      onClick={(e) => handleCopy(preset.command, e)}
-                      className="p-1 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer text-[10px]"
-                      title="Copiar comando"
-                    >
-                      {copiedCommand === preset.command ? (
-                        <span className="text-green-400 font-mono text-[9px]">✓</span>
-                      ) : (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-                          />
-                        </svg>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleRunInTerminal(preset.command, e)}
-                      className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-[9px] font-mono cursor-pointer"
-                      title="Ejecutar directamente en terminal"
-                    >
-                      ▶ Run
-                    </button>
-                  </div>
+              {preset.id === 'alto' && (
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPresetId('alto');
+                      setHighModelChoice('hermes3:8b');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[9px] font-mono transition-all cursor-pointer ${
+                      highModelChoice === 'hermes3:8b'
+                        ? 'bg-red-950/60 text-[#EF4444] border border-red-500/50 shadow-[0_0_6px_rgba(239,68,68,0.3)]'
+                        : 'bg-white/5 text-white/50 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    hermes3:8b
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedPresetId('alto');
+                      setHighModelChoice('qwen2.5:14b');
+                    }}
+                    className={`px-2 py-0.5 rounded text-[9px] font-mono transition-all cursor-pointer ${
+                      highModelChoice === 'qwen2.5:14b'
+                        ? 'bg-red-950/60 text-[#EF4444] border border-red-500/50 shadow-[0_0_6px_rgba(239,68,68,0.3)]'
+                        : 'bg-white/5 text-white/50 hover:text-white border border-white/5'
+                    }`}
+                  >
+                    qwen2.5:14b
+                  </button>
                 </div>
+              )}
+
+              {preset.id !== 'personalizado' ? (
+                (() => {
+                  const currentCmd = preset.id === 'alto' ? `ollama run ${highModelChoice}` : preset.command;
+                  return (
+                    <div className="mt-1 flex items-center justify-between gap-1 pt-1.5 border-t border-white/5">
+                      <code className="text-[10px] font-mono text-white/90 truncate bg-black/40 px-1.5 py-0.5 rounded border border-white/5">
+                        {currentCmd}
+                      </code>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopy(currentCmd, e)}
+                          className="p-1 rounded hover:bg-white/10 text-white/60 hover:text-white transition-colors cursor-pointer text-[10px]"
+                          title="Copiar comando"
+                        >
+                          {copiedCommand === currentCmd ? (
+                            <span className="text-green-400 font-mono text-[9px]">✓</span>
+                          ) : (
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                              />
+                            </svg>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleRunInTerminal(currentCmd, e)}
+                          className="px-1.5 py-0.5 rounded bg-white/5 hover:bg-white/15 text-white/80 hover:text-white text-[9px] font-mono cursor-pointer"
+                          title="Ejecutar directamente en terminal"
+                        >
+                          ▶ Run
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()
               ) : (
                 <div className="mt-1 pt-1.5 border-t border-white/5">
                   <input

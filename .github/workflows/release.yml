@@ -51,11 +51,10 @@ jobs:
             - **Instalador NSIS (`.exe`):** Asistente interactivo de instalación directa.
             - **Paquete MSI (`.msi`):** Instalador para entornos corporativos y estándar de Windows.
             
-            ✨ **Novedades de esta versión (v1.1.14):**
-            - **Atajos Globales de Windows Fiables:** Intercepción a bajo nivel mediante gancho `WH_KEYBOARD_LL` con seguimiento preciso de estado: tecla `Win` única para Enigma Launcher (`toggle-launcher`) suprimiendo el menú de inicio nativo; `Alt + 3` para Enigma AI Hub (`toggle-enigma`); `Alt + Espacio` para Búsqueda Notch (`trigger-search` / `open-search`) suprimiendo el menú del sistema Windows (`SC_KEYMENU`); y `Alt + V` para historial de portapapeles.
-            - **Inhibición Inteligente de Click-Through:** Control atómico de modo interactivo (`MAIN_INTERACTIVE`, `DOCK_INTERACTIVE`) en el rastreador de ratón para impedir que las ventanas se vuelvan transparentes a los eventos de cursor (`set_ignore_cursor_events`) mientras una vista interactiva esté abierta.
-            - **Despersonalización Completa y Perfil Dinámico:** Despersonalización absoluta de todo el código fuente, prompts, memoria persistente SQLite (`enigma_core.md`, personas y scheduler). Personalización dinámica del operador/usuario desde los Ajustes de Enigma Hub con almacenamiento en SQLite (`enigma_settings`).
-            - **Detección y Configuración de IA Local Ollama:** Detección de conectividad en doble endpoint (`127.0.0.1` y `localhost`) e interfaz neumórfica para sistemas sin modelos instalados o con Ollama inactivo, con perfiles Básico, Equilibrado, Alto Rendimiento y Personalizado, y botones de ejecución directa en terminal y copia de comandos.
+            ✨ **Novedades de esta versión (v1.1.15):**
+            - **Atajos Globales de Windows Reforzados:** Hook de teclado de bajo nivel `WH_KEYBOARD_LL` con inyección de tecla máscara (`0xE8`) para suprimir de forma limpia el menú de inicio sin bloquear modificadores en Windows; soporte nativo dual para tecla '3' superior y numpad 3 (`VK_NUMPAD3`); eliminación de dobles emisiones de eventos para conmutación inmediata de Launcher (`toggle-launcher`), Notch Search (`toggle-search`) y Enigma AI Hub (`toggle-enigma`); activación consistente de foco e interactividad (`set_keyboard_interactivity`).
+            - **Perfil Dinámico en Router:** Inyección en tiempo real del nombre del operador configurado en los prompts de Ollama para que la IA siempre se dirija al usuario por su nombre personalizado.
+            - **Selector Interactivo de Modelos de Alto Rendimiento:** Selector directo entre `hermes3:8b` y `qwen2.5:14b` en el panel de configuración de Ollama con comandos de ejecución en terminal en 1 clic.
           releaseDraft: false
           prerelease: false
           args: ''

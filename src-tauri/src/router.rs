@@ -1699,6 +1699,13 @@ Responde ÚNICAMENTE con un JSON válido con este formato exacto:
 /// Construye el System Prompt combinado: primero Core Memory (enigma_core.md), luego la Persona Activa (Custom GPTs)
 pub fn build_combined_system_prompt(identity_core: &str, active_persona: Option<&str>) -> String {
     let mut base = identity_core.to_string();
+    let current_user = crate::memory::get_current_user_name();
+    if !base.contains("USUARIO ACTUAL") {
+        base.push_str(&format!(
+            "\n\n---\n## USUARIO ACTUAL Y OPERADOR:\nEl nombre del usuario/operador actual es: {}.\nDirígete al usuario por este nombre o como Operador según el contexto.\n---\n",
+            current_user
+        ));
+    }
     if !base.contains("REGLA ESTRICTA DE IDIOMA") {
         base.push_str("\n\n---\n## REGLA ESTRICTA DE IDIOMA (MANDATARIO ABSOLUTO):\nTu único idioma de salida es el ESPAÑOL. Aunque recibas telemetría, código, memoria o instrucciones internas en inglés, SIEMPRE debes hablar y responder única y exclusivamente en español natural.\n---\n");
     }
@@ -4048,6 +4055,16 @@ mod tests {
         let combined = build_combined_system_prompt(base_core, None);
         assert!(combined.contains(base_core));
         assert!(combined.contains("REGLA ESTRICTA DE IDIOMA"));
+        assert!(combined.contains("USUARIO ACTUAL Y OPERADOR"));
+    }
+
+    #[test]
+    fn test_build_combined_system_prompt_dynamic_user() {
+        let _ = crate::db::init_db();
+        let _ = crate::memory::save_user_name("Alex_Cyber");
+        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Base";
+        let combined = build_combined_system_prompt(base_core, None);
+        assert!(combined.contains("Alex_Cyber"));
     }
 
     #[test]

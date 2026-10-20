@@ -1322,9 +1322,19 @@ pub fn run_terminal_command(command: String) -> Result<bool, String> {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let _ = Command::new("konsole")
+        let spawned = Command::new("konsole")
             .args(["-e", "bash", "-c", &format!("{}; echo ''; read -n 1 -s -r -p 'Presiona cualquier tecla para salir...'", clean)])
             .spawn();
+        if spawned.is_err() {
+            let spawned_xterm = Command::new("x-terminal-emulator")
+                .args(["-e", "bash", "-c", &format!("{}; echo ''; read -n 1 -s -r -p 'Presiona cualquier tecla para salir...'", clean)])
+                .spawn();
+            if spawned_xterm.is_err() {
+                let _ = Command::new("gnome-terminal")
+                    .args(["--", "bash", "-c", &format!("{}; echo ''; read -n 1 -s -r -p 'Presiona cualquier tecla para salir...'", clean)])
+                    .spawn();
+            }
+        }
         Ok(true)
     }
 }
