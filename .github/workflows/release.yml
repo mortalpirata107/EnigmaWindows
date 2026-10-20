@@ -52,11 +52,10 @@ jobs:
             - **Paquete MSI (`.msi`):** Instalador para entornos corporativos y estándar de Windows.
             
             ✨ **Novedades de esta versión:**
-            - **Sustitución Nativa de la Barra de Tareas (Modo Seelen UI):** Enigma Dock sustituye limpiamente la barra de tareas de Windows (`Shell_TrayWnd`), con un botón integrado para alternar la barra nativa cuando lo desees.
-            - **Conexión 100% Real con el Sistema:** Detección de procesos Win32 en tiempo real (Opera, Chrome, Edge, Spotify, Discord, etc.), escaneo de accesos directos del Menú Inicio (`.lnk`) y ejecución nativa.
-            - **Islas Flotantes con Margen Superior de 14px:** Margen superior calibrado y sombras neumórficas sin manchas oscuras para un acabado flotante cristalino.
-            - **Aislamiento de Eventos Notch ⇄ Dock:** Eventos de cursor independientes por ventana para evitar que interactuar con el Notch despliegue el Dock inferior.
-            - **Soporte NVIDIA Serie RTX 50 (Blackwell):** Integración de perfiles y comandos Ollama para RTX 5090, 5080, 5070 Ti y 5070.
+            - **Detección Precisa del Cursor en el Dock e Histéresis:** Eliminados los fallos de selección de apps y la fuga de clics hacia el escritorio. Introducida histéresis de 160ms, buffer perimetral de 8px y desacoplamiento de drag-and-drop HTML5 con tolerancia a jitter para clics instantáneos.
+            - **Extracción de Iconos y Logos Reales de Windows (Win32):** Integración con `WM_GETICON`, `GetClassLongPtrW` y `ExtractIconExW` codificados a PNG 32-bit en tiempo real. Erradicados los recuadros rojos "NA" y los iconos genéricos de KDE para apps de Windows (Settings, Edge, Explorador, Bloc de notas, etc.).
+            - **Fallback Automático de Ejecución:** Si una app está en segundo plano o el foco Win32 no responde, el Dock lanza el ejecutable nativamente sin bloquearse.
+            - **Modo Sigiloso y Margen Superior para Maximizadas:** Telemetría en memoria sin consolas emergentes y reserva de WorkArea de 38px en la parte superior.
           releaseDraft: false
           prerelease: false
           args: ''

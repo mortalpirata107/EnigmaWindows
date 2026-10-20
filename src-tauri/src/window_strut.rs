@@ -15,11 +15,43 @@ use tauri::{WebviewWindow, Emitter};
 struct RegionCacheEntry {
     last_applied: Vec<[i32; 4]>,
     last_update: Instant,
+    #[allow(dead_code)]
+    was_inside: Option<bool>,
 }
 
 fn get_region_cache() -> &'static Mutex<HashMap<String, RegionCacheEntry>> {
     static CACHE: std::sync::OnceLock<Mutex<HashMap<String, RegionCacheEntry>>> = std::sync::OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[allow(dead_code)]
+fn is_cursor_in_regions(
+    cursor: [i32; 2],
+    win_pos: tauri::PhysicalPosition<i32>,
+    regions: &[[i32; 4]],
+    label: &str,
+) -> bool {
+    let rel_x = cursor[0] - win_pos.x;
+    let rel_y = cursor[1] - win_pos.y;
+
+    if label == "dock" && cursor[1] < win_pos.y {
+        return false;
+    }
+    if label == "main" && rel_y > 520 {
+        return false;
+    }
+
+    const MARGIN: i32 = 8;
+    for r in regions {
+        let rx = r[0] - MARGIN;
+        let ry = r[1] - MARGIN;
+        let rw = r[2] + MARGIN * 2;
+        let rh = r[3] + MARGIN * 2;
+        if rel_x >= rx && rel_x <= rx + rw && rel_y >= ry && rel_y <= ry + rh {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(target_os = "linux")]
@@ -326,18 +358,21 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
             let scale_factor = mon.scale_factor();
             let logical_w = size.width as f64 / scale_factor;
             let logical_h = size.height as f64 / scale_factor;
+            let mon_pos = mon.position();
+            let mon_x = mon_pos.x as f64 / scale_factor;
+            let mon_y = mon_pos.y as f64 / scale_factor;
 
             if window.label() == "dock" {
                 // Dock window: anchored to the BOTTOM of the screen
                 let dock_h: f64 = (580.0f64).min(logical_h - 40.0);
                 let dock_y = logical_h - dock_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, dock_h));
-                let _ = window.set_position(tauri::LogicalPosition::new(0.0, dock_y));
+                let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y + dock_y));
             } else {
                 // Main window: anchored to the TOP of the screen
                 let main_h: f64 = (500.0f64).min(logical_h - 100.0);
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, main_h));
-                let _ = window.set_position(tauri::LogicalPosition::new(0.0, 0.0));
+                let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y));
             }
         }
         // Start in click-through mode until cursor moves into notch/dock
@@ -373,57 +408,61 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
         let win = window.clone();
         let label = win.label().to_string();
         std::thread::spawn(move || {
-            let mut was_inside: Option<bool> = None;
+            let mut consecutive_outside_ticks: u32 = 0;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(16));
                 let cursor = get_cursor_position();
-                let regions = {
+                let (regions, was_inside) = {
                     let cache = get_region_cache().lock().unwrap();
-                    cache.get(&label).map(|e| e.last_applied.clone()).unwrap_or_default()
+                    let entry = cache.get(&label);
+                    (
+                        entry.map(|e| e.last_applied.clone()).unwrap_or_default(),
+                        entry.and_then(|e| e.was_inside),
+                    )
                 };
 
-                if regions.is_empty() {
-                    if was_inside != Some(false) {
-                        was_inside = Some(false);
-                        let _ = win.set_ignore_cursor_events(true);
-                        let _ = win.emit(&format!("{}_cursor_left", label), ());
-                    }
-                    continue;
-                }
-
-                // Window position in physical screen coordinates
                 let win_pos = win.outer_position().unwrap_or(tauri::PhysicalPosition { x: 0, y: 0 });
-                let rel_x = cursor[0] - win_pos.x;
-                let rel_y = cursor[1] - win_pos.y;
+                let is_inside = if regions.is_empty() {
+                    false
+                } else {
+                    is_cursor_in_regions(cursor, win_pos, &regions, &label)
+                };
 
-                let mut is_inside = false;
-                for r in &regions {
-                    let rx = r[0];
-                    let ry = r[1];
-                    let rw = r[2];
-                    let rh = r[3];
-                    if rel_x >= rx && rel_x <= rx + rw && rel_y >= ry && rel_y <= ry + rh {
-                        is_inside = true;
-                        break;
-                    }
-                }
-
-                // Crosstalk isolation between notch and dock:
-                if label == "dock" && cursor[1] < win_pos.y {
-                    is_inside = false;
-                }
-                if label == "main" && rel_y > 520 {
-                    is_inside = false;
-                }
-
-                if was_inside != Some(is_inside) {
-                    was_inside = Some(is_inside);
-                    let should_ignore = !is_inside;
-                    let _ = win.set_ignore_cursor_events(should_ignore);
-                    if is_inside {
+                if is_inside {
+                    consecutive_outside_ticks = 0;
+                    if was_inside != Some(true) {
+                        {
+                            let mut cache = get_region_cache().lock().unwrap();
+                            if let Some(entry) = cache.get_mut(&label) {
+                                entry.was_inside = Some(true);
+                            }
+                        }
+                        let _ = win.set_ignore_cursor_events(false);
                         let _ = win.emit(&format!("{}_cursor_entered", label), ());
-                    } else {
-                        let _ = win.emit(&format!("{}_cursor_left", label), ());
+                    }
+                } else {
+                    // Cursor is outside target regions
+                    if was_inside == Some(true) {
+                        consecutive_outside_ticks += 1;
+                        // Grace period of ~160ms (10 ticks @ 16ms) before enabling click-through
+                        // to prevent dropped clicks during rapid micro-movements, popovers or tooltips
+                        if consecutive_outside_ticks >= 10 {
+                            {
+                                let mut cache = get_region_cache().lock().unwrap();
+                                if let Some(entry) = cache.get_mut(&label) {
+                                    entry.was_inside = Some(false);
+                                }
+                            }
+                            let _ = win.set_ignore_cursor_events(true);
+                            let _ = win.emit(&format!("{}_cursor_left", label), ());
+                            consecutive_outside_ticks = 0;
+                        }
+                    } else if was_inside.is_none() {
+                        let mut cache = get_region_cache().lock().unwrap();
+                        if let Some(entry) = cache.get_mut(&label) {
+                            entry.was_inside = Some(false);
+                        }
+                        let _ = win.set_ignore_cursor_events(true);
                     }
                 }
             }
@@ -456,6 +495,7 @@ pub fn update_custom_input_regions(window: WebviewWindow, regions: Vec<[i32; 4]>
                 RegionCacheEntry {
                     last_applied: regions.clone(),
                     last_update: now,
+                    was_inside: None,
                 },
             );
         }
@@ -500,22 +540,32 @@ pub fn update_custom_input_regions(window: WebviewWindow, regions: Vec<[i32; 4]>
 
     #[cfg(not(target_os = "linux"))]
     {
-        if regions.is_empty() {
-            let _ = window.set_ignore_cursor_events(true);
+        let cursor = get_cursor_position();
+        let win_pos = window.outer_position().unwrap_or(tauri::PhysicalPosition { x: 0, y: 0 });
+        let is_inside = if regions.is_empty() {
+            false
         } else {
-            let cursor = get_cursor_position();
-            let mut inside = false;
-            for r in &regions {
-                let rx = r[0];
-                let ry = r[1];
-                let rw = r[2];
-                let rh = r[3];
-                if cursor[0] >= rx && cursor[0] <= rx + rw && cursor[1] >= ry && cursor[1] <= ry + rh {
-                    inside = true;
-                    break;
+            is_cursor_in_regions(cursor, win_pos, &regions, &label)
+        };
+
+        let prev_inside = {
+            let mut cache = get_region_cache().lock().unwrap();
+            let prev = cache.get(&label).and_then(|e| e.was_inside);
+            if is_inside {
+                if let Some(entry) = cache.get_mut(&label) {
+                    entry.was_inside = Some(true);
                 }
             }
-            let _ = window.set_ignore_cursor_events(!inside);
+            prev
+        };
+
+        if is_inside {
+            let _ = window.set_ignore_cursor_events(false);
+            if prev_inside != Some(true) {
+                let _ = window.emit(&format!("{}_cursor_entered", label), ());
+            }
+        } else if prev_inside.is_none() {
+            let _ = window.set_ignore_cursor_events(true);
         }
     }
 

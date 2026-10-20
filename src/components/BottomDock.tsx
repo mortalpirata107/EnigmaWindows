@@ -48,21 +48,44 @@ export interface RunningApp {
 type PinnedApp = Pick<AppItem, 'id' | 'name' | 'icon' | 'exec'>;
 
 const DEFAULT_PINNED: PinnedApp[] = [
-  { id: 'files', name: 'Explorador de Archivos', icon: 'files', exec: 'explorer.exe' },
-  { id: 'browser', name: 'Navegador Web', icon: 'edge', exec: 'start microsoft-edge:' },
-  { id: 'terminal', name: 'PowerShell / Terminal', icon: 'terminal', exec: 'powershell.exe' },
-  { id: 'taskmgr', name: 'Rendimiento y Tareas', icon: 'settings', exec: 'taskmgr.exe' },
+  { id: 'files', name: 'Explorador de Archivos', icon: 'explorer', exec: 'explorer.exe' },
+  { id: 'browser', name: 'Microsoft Edge', icon: 'edge', exec: 'start microsoft-edge:' },
+  { id: 'terminal', name: 'PowerShell / Terminal', icon: 'powershell', exec: 'powershell.exe' },
+  { id: 'taskmgr', name: 'Rendimiento y Tareas', icon: 'taskmgr', exec: 'taskmgr.exe' },
   { id: 'settings', name: 'Configuración de Windows', icon: 'settings', exec: 'start ms-settings:' },
 ];
 
 /** Claves para emparejar una app fijada con ventanas abiertas */
 function matchKeysFor(app: PinnedApp): string[] {
-  const execBin = (app.exec.trim().split(/\s+/)[0] || '').split('/').pop() || '';
-  return Array.from(new Set([app.id, app.icon, execBin].map(k => k.toLowerCase()).filter(k => k.length >= 3)));
+  let cleanExec = app.exec.trim().replace(/^start\s+/i, '');
+  cleanExec = cleanExec.split(/\s+/)[0] || '';
+  cleanExec = cleanExec.replace(/:$/, '').replace(/\.exe$/i, '').split(/[\\/]/).pop() || '';
+
+  const rawKeys = [app.id, app.icon, cleanExec];
+  if (app.id === 'browser' || app.icon === 'edge') {
+    rawKeys.push('edge', 'msedge', 'microsoft-edge');
+  }
+  if (app.id === 'taskmgr' || app.icon === 'taskmgr') {
+    rawKeys.push('taskmgr', 'taskmanager', 'task manager');
+  }
+  if (app.id === 'files' || app.icon === 'explorer' || app.icon === 'files') {
+    rawKeys.push('explorer', 'files', 'dolphin', 'nautilus');
+  }
+  if (app.id === 'terminal' || app.icon === 'powershell') {
+    rawKeys.push('powershell', 'pwsh', 'cmd', 'windowsterminal', 'terminal', 'kitty', 'konsole');
+  }
+  if (app.id === 'settings' || app.icon === 'settings') {
+    rawKeys.push('settings', 'systemsettings', 'configuracion');
+  }
+
+  return Array.from(new Set(rawKeys.map(k => k.toLowerCase()).filter(k => k.length >= 3)));
 }
 
 function windowMatches(win: OpenWindow | RunningApp, keys: string[]): boolean {
-  const hay = [win.window_class, win.app_name, win.icon].map(s => (s || '').toLowerCase()).filter(Boolean);
+  const iconStr = (win.icon && !win.icon.startsWith('data:')) ? win.icon : '';
+  const hay = [win.window_class, win.app_name, iconStr, (win as OpenWindow).title]
+    .map(s => (s || '').toLowerCase())
+    .filter(Boolean);
   return keys.some(k => hay.some(h => h.includes(k)));
 }
 
@@ -208,6 +231,7 @@ export const BottomDock: React.FC = () => {
   // ESTADO: APPS FIJADAS (persistidas en ~/.config/enigmaos/dock.json)
   // =========================================================================
   const [pinned, setPinned] = useState<PinnedApp[]>(DEFAULT_PINNED);
+  const [nativeIcons, setNativeIcons] = useState<Record<string, string>>({});
 
   useEffect(() => {
     invoke<{ pinned: PinnedApp[] } | null>('load_dock_config')
@@ -216,6 +240,20 @@ export const BottomDock: React.FC = () => {
       })
       .catch(() => {});
   }, []);
+
+  // Extraer iconos nativos reales (.ico / HICON / .exe) directamente de Win32 para cada app fijada
+  useEffect(() => {
+    pinned.forEach(p => {
+      const query = p.exec || p.id;
+      invoke<string | null>('get_app_icon', { query })
+        .then(icon => {
+          if (icon) {
+            setNativeIcons(prev => ({ ...prev, [p.id]: icon }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [pinned]);
 
   const persistPinned = useCallback((next: PinnedApp[]) => {
     setPinned(next);
@@ -239,7 +277,12 @@ export const BottomDock: React.FC = () => {
       wins.forEach(w => {
         claimedWindowIds.add(w.id);
         if (w.window_class) claimedClasses.add(w.window_class.toLowerCase());
+        if (w.app_name) claimedClasses.add(w.app_name.toLowerCase());
       });
+      claimedClasses.add(p.id.toLowerCase());
+      claimedClasses.add(p.name.toLowerCase());
+      if (p.icon) claimedClasses.add(p.icon.toLowerCase());
+      keys.forEach(k => claimedClasses.add(k.toLowerCase()));
 
       const active = wins.find(w => w.is_active);
       const procName = processNameFor(p);
@@ -260,9 +303,12 @@ export const BottomDock: React.FC = () => {
       });
 
       const isRunning = isProcessRunning || wins.length > 0;
+      const realWinIcon = wins.find(w => w.icon && (w.icon.startsWith('data:') || w.icon.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(w.icon)))?.icon;
+      const effectiveIcon = realWinIcon || nativeIcons[p.id] || p.icon;
 
       return {
         ...p,
+        icon: effectiveIcon,
         processName: procName,
         isPinned: true,
         isRunning,
@@ -285,8 +331,20 @@ export const BottomDock: React.FC = () => {
       if (claimedWindowIds.has(wid)) continue;
 
       const appKey = (w.app_name || w.window_class || wid).toLowerCase();
-      if (claimedClasses.has(appKey) || seenDynamicClasses.has(appKey)) continue;
+      const winClass = (w.window_class || '').toLowerCase();
+      const appName = (w.app_name || '').toLowerCase();
+
+      if (
+        claimedClasses.has(appKey) ||
+        (winClass && claimedClasses.has(winClass)) ||
+        (appName && claimedClasses.has(appName)) ||
+        seenDynamicClasses.has(appKey)
+      ) {
+        continue;
+      }
       seenDynamicClasses.add(appKey);
+      if (winClass) seenDynamicClasses.add(winClass);
+      if (appName) seenDynamicClasses.add(appName);
 
       // Intentar vincular con .desktop o app del sistema para el comando Exec
       const desktop = apps.find(a =>
@@ -327,7 +385,7 @@ export const BottomDock: React.FC = () => {
       pinnedApps: filteredPinned,
       runningUnpinnedApps: filteredUnpinned,
     };
-  }, [pinned, windows, runningAppsFromRust, apps, quitIds, badges, bouncingIds, runningProcesses]);
+  }, [pinned, nativeIcons, windows, runningAppsFromRust, apps, quitIds, badges, bouncingIds, runningProcesses]);
 
   const allApps = useMemo(() => [...pinnedApps, ...runningUnpinnedApps], [pinnedApps, runningUnpinnedApps]);
 
@@ -359,17 +417,16 @@ export const BottomDock: React.FC = () => {
 
       let regions: [number, number, number, number][] = [];
 
-      // Modo reposo: pastilla mini dock (hitbox milimétrica al borde inferior de la pantalla)
-      // Decisión basada SOLO en estado (refs), nunca en nodos DOM que siguen montados durante animaciones de salida
-      // Modo reposo: pastilla mini dock (hitbox milimétrica al borde inferior de la pantalla)
-      // Si el cursor no está sobre el dock y el launcher no está abierto,
-      // el dock ESTÁ EN REPOSO: la hitbox DEBE SER ESTRICTAMENTE la pastilla mini dock.
       const launcherOpen = isLauncherOpenRef.current;
       const menuOpen = !!contextMenuAppIdRef.current;
-      if (!isHoveredRef.current && !launcherOpen && !menuOpen) {
-        const triggerW = Math.max(IDLE_WIDTH, 420);
-        const idleX = centerX - triggerW / 2;
-        const idleY = screenH - BOTTOM_MARGIN - IDLE_HEIGHT - 16;
+      const previewOpen = !!activePreviewAppIdRef.current;
+      const isExpandedMode = isHoveredRef.current || launcherOpen || menuOpen || previewOpen;
+
+      if (!isExpandedMode) {
+        // Modo reposo: franja inferior generosa
+        const triggerW = Math.max(expandedWidth + 160, 720);
+        const idleX = Math.max(0, centerX - triggerW / 2);
+        const idleY = screenH - BOTTOM_MARGIN - IDLE_HEIGHT - 24;
         const x = Math.max(0, Math.round(idleX * dpr));
         const y = Math.max(0, Math.round(idleY * dpr));
         const w = Math.round(triggerW * dpr);
@@ -377,31 +434,40 @@ export const BottomDock: React.FC = () => {
         regions = [[x, y, w, h]];
       } else {
         // Modo expandido: calcular caja contenedora del Dock y Launcher / Menú / Previews
-        const previewOpen = !!activePreviewAppIdRef.current;
-        let minLeft = centerX - expandedWidth / 2;
-        let maxRight = centerX + expandedWidth / 2;
-        let minTop = screenH - BOTTOM_MARGIN - DOCK_HEIGHT - 30;
+        let minLeft = centerX - expandedWidth / 2 - 60;
+        let maxRight = centerX + expandedWidth / 2 + 60;
+        let minTop = screenH - BOTTOM_MARGIN - DOCK_HEIGHT - 60;
         let maxBottom = screenH;
 
         if (launcherOpen) {
-          minTop = Math.min(minTop, screenH - BOTTOM_MARGIN - DOCK_HEIGHT - 560);
-          maxRight = Math.max(maxRight, minLeft + 720);
+          minTop = 0;
+          maxRight = Math.max(maxRight, minLeft + 760);
+        } else if (menuOpen) {
+          minTop = Math.min(minTop, Math.max(0, screenH - 520));
+        } else if (previewOpen) {
+          minTop = Math.min(minTop, Math.max(0, screenH - 420));
+          minLeft = Math.min(minLeft, centerX - 580);
+          maxRight = Math.max(maxRight, centerX + 580);
         }
 
-        if (menuOpen) {
-          minTop = Math.min(minTop, screenH - BOTTOM_MARGIN - DOCK_HEIGHT - 480);
+        if (dockRef.current) {
+          const rect = dockRef.current.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            minLeft = Math.min(minLeft, rect.left - 40);
+            maxRight = Math.max(maxRight, rect.right + 40);
+            minTop = Math.min(minTop, rect.top - 40);
+            maxBottom = Math.max(maxBottom, rect.bottom + 20);
+          }
         }
 
-        if (previewOpen) {
-          minTop = Math.min(minTop, screenH - BOTTOM_MARGIN - DOCK_HEIGHT - 380);
-          minLeft = Math.min(minLeft, centerX - 560);
-          maxRight = Math.max(maxRight, centerX + 560);
-        }
+        minLeft = Math.max(0, minLeft);
+        maxRight = Math.min(screenW, maxRight);
+        minTop = Math.max(0, minTop);
 
-        const x = Math.max(0, Math.round((minLeft - 30) * dpr));
-        const y = Math.max(0, Math.round((minTop - 20) * dpr));
-        const w = Math.round((maxRight - minLeft + 60) * dpr);
-        const h = Math.round((maxBottom - minTop + 25) * dpr);
+        const x = Math.max(0, Math.round(minLeft * dpr));
+        const y = Math.max(0, Math.round(minTop * dpr));
+        const w = Math.round((maxRight - minLeft) * dpr);
+        const h = Math.round((maxBottom - minTop) * dpr);
         regions = [[x, y, w, h]];
       }
 
@@ -595,18 +661,26 @@ export const BottomDock: React.FC = () => {
   }, []);
 
   // Task Switching (Cambio de Tareas):
-  // Si isRunning es true -> focus_window({ appName: app.name }); si no -> lanzar con rebote
+  // Si tiene ventanas abiertas -> enfocar; si falla o no tiene ventanas -> lanzar con rebote
   const handleItemClick = useCallback((app: AppItem) => {
     setContextMenuAppId(null);
-    if (app.isRunning) {
-      invoke('focus_window', { appName: app.name }).catch(err => {
-        console.warn('[BottomDock] focus_window falló:', err);
-      });
+    const hasOpenWindows = !!(app.windows && app.windows.length > 0);
+    if (hasOpenWindows) {
+      const targetId = app.windowId || app.windows![0]?.id;
+      invoke('focus_window', { id: targetId, appName: app.name || app.id })
+        .then(() => {
+          refreshWindows();
+        })
+        .catch(err => {
+          console.warn('[BottomDock] focus_window falló, lanzando app:', err);
+          startBounce(app.id);
+          launch(app);
+        });
     } else {
       startBounce(app.id);
       launch(app);
     }
-  }, [launch, startBounce]);
+  }, [launch, startBounce, refreshWindows]);
 
   // Gestión de Previsualizaciones de Ventanas Flotantes
   const handleFocusWindow = useCallback((windowId: string) => {
@@ -837,8 +911,13 @@ export const BottomDock: React.FC = () => {
         type="button"
         onClick={() => {
           setContextMenuAppId(null);
-          if (app.isRunning) {
-            invoke('focus_window', { appName: app.name, id: app.windowId }).catch(() => {});
+          const hasOpenWindows = !!(app.windows && app.windows.length > 0);
+          if (hasOpenWindows) {
+            const targetId = app.windowId || app.windows![0]?.id;
+            invoke('focus_window', { id: targetId, appName: app.name || app.id }).catch(() => {
+              startBounce(app.id);
+              launch(app);
+            });
           } else {
             startBounce(app.id);
             launch(app);
@@ -1083,6 +1162,9 @@ export const BottomDock: React.FC = () => {
         id="bottom-dock-container"
         layout
         onMouseEnter={handleMouseEnter}
+        onMouseMove={(e) => {
+          if (!contextMenuAppId) mouseX.set(e.clientX);
+        }}
         onMouseLeave={handleMouseLeave}
         initial={{
           width: IDLE_WIDTH,

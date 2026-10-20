@@ -37,7 +37,15 @@ fn log_frontend(window: WebviewWindow, msg: String) {
 
 #[tauri::command]
 fn focus_window(app_name: Option<String>, id: Option<String>) -> Result<(), String> {
-    let target = app_name.or(id).unwrap_or_default();
+    if let Some(ref win_id) = id {
+        if !win_id.trim().is_empty() {
+            if windows::focus_window_by_id(win_id).is_ok() {
+                return Ok(());
+            }
+        }
+    }
+
+    let target = id.or(app_name).unwrap_or_default();
     if target.trim().is_empty() {
         return Ok(());
     }
@@ -83,11 +91,13 @@ fn focus_window(app_name: Option<String>, id: Option<String>) -> Result<(), Stri
             w.id == target
                 || w.app_name.to_lowercase().contains(&lower_target)
                 || lower_target.contains(&w.app_name.to_lowercase())
+                || w.window_class.to_lowercase().contains(&lower_target)
+                || lower_target.contains(&w.window_class.to_lowercase())
                 || w.title.to_lowercase().contains(&lower_target)
         }) {
-            let _ = windows::focus_window_by_id(&win.id);
+            windows::focus_window_by_id(&win.id)?;
         } else {
-            let _ = windows::focus_window_by_id(&target);
+            windows::focus_window_by_id(&target)?;
         }
     }
 
@@ -463,6 +473,7 @@ fn main() {
             window_strut::set_keyboard_interactivity,
             window_strut::get_cursor_position,
             windows::get_open_windows,
+            windows::get_app_icon,
             focus_window,
             dock::launch_app,
             dock::force_quit,

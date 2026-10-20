@@ -49,7 +49,7 @@ export const WindowPreviewPopover: React.FC<WindowPreviewPopoverProps> = ({
           <div className="w-full flex items-center justify-between px-2.5 pb-2 text-[10.5px] text-white/60 font-medium tracking-wide border-b border-white/10 mb-2.5">
             <span className="flex items-center gap-1.5 text-white/90 font-semibold">
               <div className="w-4 h-4 flex items-center justify-center">
-                <AppIcon windowClass={appIcon} appName={appName} />
+                <AppIcon iconPath={appIcon} windowClass={appIcon} appName={appName} />
               </div>
               {appName}
             </span>

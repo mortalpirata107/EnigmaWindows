@@ -15,8 +15,19 @@ import {
 import { 
   VscVscode, 
   VscTerminalBash, 
-  VscFolder 
+  VscFolder,
+  VscSettingsGear,
+  VscPulse,
+  VscTerminalPowershell,
+  VscTerminalCmd
 } from 'react-icons/vsc';
+import {
+  BsBrowserEdge,
+  BsWindows,
+  BsFileText,
+  BsCalculator,
+  BsPaintBucket
+} from 'react-icons/bs';
 
 export interface AppBrandInfo {
   icon: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
@@ -25,6 +36,86 @@ export interface AppBrandInfo {
 }
 
 const BRAND_REGISTRY: Record<string, AppBrandInfo> = {
+  edge: {
+    icon: BsBrowserEdge,
+    brandColor: '#0078D7',
+    shadowColor: 'rgba(0, 120, 215, 0.55)',
+  },
+  msedge: {
+    icon: BsBrowserEdge,
+    brandColor: '#0078D7',
+    shadowColor: 'rgba(0, 120, 215, 0.55)',
+  },
+  'microsoft-edge': {
+    icon: BsBrowserEdge,
+    brandColor: '#0078D7',
+    shadowColor: 'rgba(0, 120, 215, 0.55)',
+  },
+  browser: {
+    icon: BsBrowserEdge,
+    brandColor: '#0078D7',
+    shadowColor: 'rgba(0, 120, 215, 0.55)',
+  },
+  navegador: {
+    icon: BsBrowserEdge,
+    brandColor: '#0078D7',
+    shadowColor: 'rgba(0, 120, 215, 0.55)',
+  },
+  taskmgr: {
+    icon: VscPulse,
+    brandColor: '#10B981',
+    shadowColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  taskmanager: {
+    icon: VscPulse,
+    brandColor: '#10B981',
+    shadowColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  'task manager': {
+    icon: VscPulse,
+    brandColor: '#10B981',
+    shadowColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  rendimiento: {
+    icon: VscPulse,
+    brandColor: '#10B981',
+    shadowColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  tareas: {
+    icon: VscPulse,
+    brandColor: '#10B981',
+    shadowColor: 'rgba(16, 185, 129, 0.5)',
+  },
+  powershell: {
+    icon: VscTerminalPowershell,
+    brandColor: '#2670E8',
+    shadowColor: 'rgba(38, 112, 232, 0.5)',
+  },
+  pwsh: {
+    icon: VscTerminalPowershell,
+    brandColor: '#2670E8',
+    shadowColor: 'rgba(38, 112, 232, 0.5)',
+  },
+  cmd: {
+    icon: VscTerminalCmd,
+    brandColor: '#D1D5DB',
+    shadowColor: 'rgba(209, 213, 219, 0.4)',
+  },
+  commandprompt: {
+    icon: VscTerminalCmd,
+    brandColor: '#D1D5DB',
+    shadowColor: 'rgba(209, 213, 219, 0.4)',
+  },
+  explorer: {
+    icon: VscFolder,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  windows: {
+    icon: BsWindows,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
   spotify: {
     icon: SiSpotify,
     brandColor: '#1ED760',
@@ -141,24 +232,80 @@ const BRAND_REGISTRY: Record<string, AppBrandInfo> = {
     shadowColor: 'rgba(167, 139, 250, 0.55)',
   },
   systemsettings: {
-    icon: SiKde,
-    brandColor: '#00C3FF',
-    shadowColor: 'rgba(0, 195, 255, 0.5)',
+    icon: VscSettingsGear,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
   },
   settings: {
+    icon: VscSettingsGear,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  configuracion: {
+    icon: VscSettingsGear,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  preferencias: {
+    icon: VscSettingsGear,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  kde: {
     icon: SiKde,
     brandColor: '#00C3FF',
     shadowColor: 'rgba(0, 195, 255, 0.5)',
   },
-  preferencias: {
+  plasma: {
     icon: SiKde,
     brandColor: '#00C3FF',
     shadowColor: 'rgba(0, 195, 255, 0.5)',
+  },
+  notepad: {
+    icon: BsFileText,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  blocdenotas: {
+    icon: BsFileText,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  'bloc de notas': {
+    icon: BsFileText,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  calc: {
+    icon: BsCalculator,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  calculator: {
+    icon: BsCalculator,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  calculadora: {
+    icon: BsCalculator,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  paint: {
+    icon: BsPaintBucket,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
+  },
+  mspaint: {
+    icon: BsPaintBucket,
+    brandColor: '#0078D4',
+    shadowColor: 'rgba(0, 120, 212, 0.5)',
   },
 };
 
-export function getAppBrand(windowClass?: string, appName?: string, title?: string): AppBrandInfo | null {
+export function getAppBrand(windowClass?: string, appName?: string, title?: string, iconKey?: string): AppBrandInfo | null {
   const candidates = [
+    iconKey?.toLowerCase() || '',
     windowClass?.toLowerCase() || '',
     appName?.toLowerCase() || '',
     title?.toLowerCase() || '',
@@ -168,7 +315,7 @@ export function getAppBrand(windowClass?: string, appName?: string, title?: stri
     if (!query) continue;
 
     for (const [key, brand] of Object.entries(BRAND_REGISTRY)) {
-      if (query.includes(key) || key.includes(query)) {
+      if (query === key || query.includes(key) || (query.length >= 3 && key.includes(query))) {
         return brand;
       }
     }
@@ -190,7 +337,7 @@ export interface AppIconProps {
  * Authentic Icon Component:
  * - If an icon path or data URL is provided, renders the real desktop icon using convertFileSrc.
  * - Otherwise matches registered brand SVGs.
- * - For unmapped apps without paths, renders a sleek neomorphic glass tile with the initial letter.
+ * - For unmapped apps without paths, renders a sleek acrylic glass tile with the initial letter.
  */
 export const AppIcon: React.FC<AppIconProps> = ({
   iconPath,
@@ -200,6 +347,11 @@ export const AppIcon: React.FC<AppIconProps> = ({
   className = 'w-full h-full',
 }) => {
   const [imgError, setImgError] = React.useState(false);
+
+  React.useEffect(() => {
+    setImgError(false);
+  }, [iconPath, windowClass]);
+
   const checkIsAbs = (p?: string) => !!p && (p.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(p));
   const rawPath = (iconPath || (checkIsAbs(windowClass) ? windowClass : (checkIsAbs(appName) ? appName : ''))) || '';
   const isAbsPath = checkIsAbs(rawPath);
@@ -220,7 +372,7 @@ export const AppIcon: React.FC<AppIconProps> = ({
     );
   }
 
-  const brand = getAppBrand(windowClass, appName, title);
+  const brand = getAppBrand(windowClass, appName, title, iconPath || rawPath);
 
   if (brand) {
     const IconComponent = brand.icon;
@@ -237,17 +389,25 @@ export const AppIcon: React.FC<AppIconProps> = ({
     );
   }
 
-  // Neomorphic Fallback Tile with Initial Letter for Unmapped Applications (Cubo/Terminal en Rojo y Blanco)
-  const displayName = title || appName || windowClass || 'App';
-  const initial = displayName.trim().slice(0, 2).toUpperCase() || 'AP';
+  // Modern acrylic glass tile fallback for unmapped applications
+  const displayName = title || appName || windowClass || iconPath || 'App';
+  let initial = displayName.trim().slice(0, 2).toUpperCase() || 'AP';
+  if (initial === 'NA' || initial === 'N/' || initial === 'UN') {
+    const fallbackCandidates = [appName, title, windowClass, iconPath]
+      .filter((s): s is string => !!s && !s.toLowerCase().startsWith('n/a') && !s.toLowerCase().startsWith('na'))
+      .map(s => s.trim().slice(0, 2).toUpperCase())
+      .filter(s => s.length >= 1);
+    initial = fallbackCandidates[0] || 'AP';
+  }
 
   return (
-    <div className="w-full h-full rounded-xl bg-[#070709] border border-red-950/40 shadow-[inset_2px_2px_4px_#020203,inset_-1px_-1px_3px_#14141B] flex flex-col items-center justify-center p-1 select-none">
-      <span className="text-[9px] font-mono font-bold text-[#EF4444] uppercase tracking-tighter leading-none mb-0.5">
+    <div className="w-full h-full rounded-xl bg-white/[0.06] border border-white/20 shadow-[inset_0_1px_1px_rgba(255,255,255,0.2),0_4px_12px_rgba(0,0,0,0.5)] backdrop-blur-md flex flex-col items-center justify-center p-1 select-none">
+      <span className="text-[9.5px] font-mono font-bold text-white/90 uppercase tracking-tighter leading-none mb-0.5">
         {initial}
       </span>
-      <svg className="w-3.5 h-3.5 text-white/80" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+      <svg className="w-3.5 h-3.5 text-white/60" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <rect x="3" y="3" width="18" height="18" rx="3" strokeWidth={1.8} />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 9h18M9 21V9" />
       </svg>
     </div>
   );

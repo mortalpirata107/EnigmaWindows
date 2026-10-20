@@ -115,7 +115,7 @@ export const WindowPreviewCard: React.FC<WindowPreviewCardProps> = ({
         {/* Icono y título de la ventana */}
         <div className="flex items-center gap-1.5 min-w-0 flex-1 mr-2 overflow-hidden">
           <div className="w-3.5 h-3.5 flex-shrink-0 flex items-center justify-center opacity-85 group-hover:opacity-100">
-            <AppIcon windowClass={win.window_class || appIcon} appName={win.app_name || appName} />
+            <AppIcon iconPath={win.icon || appIcon} windowClass={win.window_class || appIcon} appName={win.app_name || appName} />
           </div>
           <span
             className="text-[11px] font-semibold text-white/90 truncate leading-none"
@@ -181,7 +181,7 @@ export const WindowPreviewCard: React.FC<WindowPreviewCardProps> = ({
             {/* Centro de la ventana: Icono oficial con aura y título de estado */}
             <div className="relative flex flex-col items-center justify-center my-auto z-10">
               <div className="w-11 h-11 flex items-center justify-center mb-1.5 drop-shadow-[0_4px_16px_rgba(0,0,0,0.9)] group-hover:scale-110 transition-transform duration-200">
-                <AppIcon windowClass={win.window_class || appIcon} appName={win.app_name || appName} />
+                <AppIcon iconPath={win.icon || appIcon} windowClass={win.window_class || appIcon} appName={win.app_name || appName} />
               </div>
               <span className="text-[10px] font-medium text-white/60 tracking-wider">
                 {win.is_active ? 'VENTANA EN PRIMER PLANO' : 'CLIC PARA ENFOCAR'}

@@ -567,6 +567,388 @@ static WINDOW_CLASS_CACHE: RwLock<Option<std::collections::HashMap<String, Strin
 }
 
 #[cfg(target_os = "windows")]
+fn get_icon_cache() -> &'static RwLock<std::collections::HashMap<String, String>> {
+    static CACHE: OnceLock<RwLock<std::collections::HashMap<String, String>>> = OnceLock::new();
+    CACHE.get_or_init(|| RwLock::new(std::collections::HashMap::new()))
+}
+
+#[cfg(target_os = "windows")]
+fn hicon_to_png_base64(hicon: windows_sys::Win32::UI::WindowsAndMessaging::HICON) -> Option<String> {
+    use windows_sys::Win32::Graphics::Gdi::{
+        CreateCompatibleDC, DeleteDC, DeleteObject, GetDC, ReleaseDC, GetDIBits,
+        BITMAPINFO, BITMAPINFOHEADER, BI_RGB, DIB_RGB_COLORS, GetObjectW, BITMAP,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetIconInfo, ICONINFO};
+
+    unsafe {
+        let mut icon_info: ICONINFO = std::mem::zeroed();
+        if GetIconInfo(hicon, &mut icon_info) == 0 {
+            return None;
+        }
+
+        let hdc = GetDC(0);
+        let mem_dc = CreateCompatibleDC(hdc);
+
+        let mut bm: BITMAP = std::mem::zeroed();
+        let obj_res = GetObjectW(
+            icon_info.hbmColor as _,
+            std::mem::size_of::<BITMAP>() as i32,
+            &mut bm as *mut _ as *mut _,
+        );
+
+        let width = bm.bmWidth;
+        let height = bm.bmHeight;
+        if obj_res == 0 || width <= 0 || height <= 0 {
+            if icon_info.hbmColor != 0 {
+                DeleteObject(icon_info.hbmColor as _);
+            }
+            if icon_info.hbmMask != 0 {
+                DeleteObject(icon_info.hbmMask as _);
+            }
+            DeleteDC(mem_dc);
+            ReleaseDC(0, hdc);
+            return None;
+        }
+
+        let mut bmi: BITMAPINFO = std::mem::zeroed();
+        bmi.bmiHeader.biSize = std::mem::size_of::<BITMAPINFOHEADER>() as u32;
+        bmi.bmiHeader.biWidth = width;
+        bmi.bmiHeader.biHeight = -height; // Top-down
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        let buf_size = (width * height * 4) as usize;
+        let mut raw_pixels = vec![0u8; buf_size];
+
+        let lines = GetDIBits(
+            mem_dc,
+            icon_info.hbmColor as _,
+            0,
+            height as u32,
+            raw_pixels.as_mut_ptr() as *mut _,
+            &mut bmi,
+            DIB_RGB_COLORS,
+        );
+
+        if icon_info.hbmColor != 0 {
+            DeleteObject(icon_info.hbmColor as _);
+        }
+        if icon_info.hbmMask != 0 {
+            DeleteObject(icon_info.hbmMask as _);
+        }
+        DeleteDC(mem_dc);
+        ReleaseDC(0, hdc);
+
+        if lines == 0 {
+            return None;
+        }
+
+        let mut has_alpha = false;
+        for i in (0..buf_size).step_by(4) {
+            let b = raw_pixels[i];
+            let r = raw_pixels[i + 2];
+            let a = raw_pixels[i + 3];
+            raw_pixels[i] = r;
+            raw_pixels[i + 2] = b;
+            if a > 0 {
+                has_alpha = true;
+            }
+        }
+        if !has_alpha {
+            for i in (0..buf_size).step_by(4) {
+                raw_pixels[i + 3] = 255;
+            }
+        }
+
+        let img = image::RgbaImage::from_raw(width as u32, height as u32, raw_pixels)?;
+        let mut png_bytes = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut png_bytes, image::ImageFormat::Png).ok()?;
+
+        let b64 = BASE64_STANDARD.encode(png_bytes.into_inner());
+        Some(format!("data:image/png;base64,{}", b64))
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_common_windows_exe(query: &str) -> String {
+    let clean = query.trim().trim_matches('"').trim_matches('\'');
+    let path = std::path::Path::new(clean);
+    if path.is_absolute() && path.exists() {
+        return clean.to_string();
+    }
+
+    let lower = clean.to_lowercase();
+    let lower_stem = lower.strip_suffix(".exe").unwrap_or(&lower);
+    let lower_stem = lower_stem.strip_prefix("start ").unwrap_or(lower_stem).trim();
+    let lower_stem = lower_stem.strip_suffix(':').unwrap_or(lower_stem);
+
+    let windir = std::env::var("WINDIR").unwrap_or_else(|_| "C:\\Windows".to_string());
+    let prog_files = std::env::var("ProgramFiles").unwrap_or_else(|_| "C:\\Program Files".to_string());
+    let prog_files_x86 = std::env::var("ProgramFiles(x86)").unwrap_or_else(|_| "C:\\Program Files (x86)".to_string());
+    let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
+    let app_data = std::env::var("APPDATA").unwrap_or_default();
+
+    let candidates = match lower_stem {
+        "explorer" | "files" => vec![
+            format!("{}\\explorer.exe", windir),
+        ],
+        "msedge" | "edge" | "microsoft-edge" | "browser" | "navegador" => vec![
+            format!("{}\\Microsoft\\Edge\\Application\\msedge.exe", prog_files_x86),
+            format!("{}\\Microsoft\\Edge\\Application\\msedge.exe", prog_files),
+        ],
+        "powershell" | "terminal" | "pwsh" => vec![
+            format!("{}\\System32\\WindowsPowerShell\\v1.0\\powershell.exe", windir),
+            format!("{}\\Microsoft\\WindowsApps\\wt.exe", local_app_data),
+        ],
+        "cmd" => vec![
+            format!("{}\\System32\\cmd.exe", windir),
+        ],
+        "taskmgr" | "taskmanager" => vec![
+            format!("{}\\System32\\Taskmgr.exe", windir),
+        ],
+        "settings" | "systemsettings" | "ms-settings" => vec![
+            format!("{}\\ImmersiveControlPanel\\SystemSettings.exe", windir),
+            format!("{}\\System32\\SystemSettingsAdminFlows.exe", windir),
+        ],
+        "notepad" => vec![
+            format!("{}\\notepad.exe", windir),
+            format!("{}\\System32\\notepad.exe", windir),
+        ],
+        "calc" | "calculator" => vec![
+            format!("{}\\System32\\calc.exe", windir),
+        ],
+        "mspaint" | "paint" => vec![
+            format!("{}\\System32\\mspaint.exe", windir),
+        ],
+        "chrome" | "google-chrome" => vec![
+            format!("{}\\Google\\Chrome\\Application\\chrome.exe", prog_files),
+            format!("{}\\Google\\Chrome\\Application\\chrome.exe", prog_files_x86),
+        ],
+        "firefox" => vec![
+            format!("{}\\Mozilla Firefox\\firefox.exe", prog_files),
+            format!("{}\\Mozilla Firefox\\firefox.exe", prog_files_x86),
+        ],
+        "opera" | "operagx" => vec![
+            format!("{}\\Programs\\Opera\\launcher.exe", local_app_data),
+            format!("{}\\Programs\\Opera GX\\launcher.exe", local_app_data),
+            format!("{}\\Opera\\launcher.exe", prog_files),
+            format!("{}\\Opera\\launcher.exe", prog_files_x86),
+        ],
+        "brave" => vec![
+            format!("{}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe", prog_files),
+            format!("{}\\BraveSoftware\\Brave-Browser\\Application\\brave.exe", prog_files_x86),
+        ],
+        "code" | "vscode" => vec![
+            format!("{}\\Programs\\Microsoft VS Code\\Code.exe", local_app_data),
+            format!("{}\\Microsoft VS Code\\Code.exe", prog_files),
+        ],
+        "spotify" => vec![
+            format!("{}\\Spotify\\Spotify.exe", local_app_data),
+            format!("{}\\Spotify\\Spotify.exe", app_data),
+        ],
+        "discord" => vec![
+            format!("{}\\Discord\\Update.exe", local_app_data),
+        ],
+        "telegram" => vec![
+            format!("{}\\Telegram Desktop\\Telegram.exe", app_data),
+        ],
+        "steam" => vec![
+            format!("{}\\Steam\\steam.exe", prog_files_x86),
+            format!("{}\\Steam\\steam.exe", prog_files),
+        ],
+        "whatsapp" => vec![
+            format!("{}\\WhatsApp\\WhatsApp.exe", local_app_data),
+        ],
+        _ => vec![
+            format!("{}\\System32\\{}.exe", windir, lower_stem),
+            format!("{}\\System32\\{}.exe", windir, clean),
+            format!("{}\\System32\\{}", windir, clean),
+            format!("{}\\Microsoft\\WindowsApps\\{}.exe", local_app_data, lower_stem),
+        ],
+    };
+
+    for c in candidates {
+        if std::path::Path::new(&c).exists() {
+            return c;
+        }
+    }
+
+    String::new()
+}
+
+#[cfg(target_os = "windows")]
+pub fn extract_windows_icon(hwnd: windows_sys::Win32::Foundation::HWND, full_exe_path: &str, proc_stem: &str) -> Option<String> {
+    let cache_key = if !full_exe_path.is_empty() {
+        full_exe_path.to_lowercase()
+    } else {
+        proc_stem.to_lowercase()
+    };
+
+    if !cache_key.is_empty() {
+        if let Some(cached) = get_icon_cache().read().ok().and_then(|c| c.get(&cache_key).cloned()) {
+            return Some(cached);
+        }
+    }
+
+    // 1. Try window message / class icon if hwnd is non-zero
+    if hwnd != 0 {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{
+            SendMessageTimeoutW, GetClassLongPtrW, WM_GETICON, ICON_BIG, ICON_SMALL2,
+            ICON_SMALL, SMTO_ABORTIFHUNG, GCLP_HICON, GCLP_HICONSM,
+        };
+
+        let mut hicon: usize = 0;
+        let _ = unsafe {
+            SendMessageTimeoutW(
+                hwnd,
+                WM_GETICON,
+                ICON_BIG as _,
+                0,
+                SMTO_ABORTIFHUNG,
+                50,
+                &mut hicon,
+            )
+        };
+        if hicon == 0 {
+            let _ = unsafe {
+                SendMessageTimeoutW(
+                    hwnd,
+                    WM_GETICON,
+                    ICON_SMALL2 as _,
+                    0,
+                    SMTO_ABORTIFHUNG,
+                    50,
+                    &mut hicon,
+                )
+            };
+        }
+        if hicon == 0 {
+            let _ = unsafe {
+                SendMessageTimeoutW(
+                    hwnd,
+                    WM_GETICON,
+                    ICON_SMALL as _,
+                    0,
+                    SMTO_ABORTIFHUNG,
+                    50,
+                    &mut hicon,
+                )
+            };
+        }
+        if hicon == 0 {
+            hicon = unsafe { GetClassLongPtrW(hwnd, GCLP_HICON) };
+        }
+        if hicon == 0 {
+            hicon = unsafe { GetClassLongPtrW(hwnd, GCLP_HICONSM) };
+        }
+
+        if hicon != 0 {
+            if let Some(data_url) = hicon_to_png_base64(hicon as _) {
+                if !cache_key.is_empty() {
+                    if let Ok(mut lock) = get_icon_cache().write() {
+                        lock.insert(cache_key, data_url.clone());
+                    }
+                }
+                return Some(data_url);
+            }
+        }
+    }
+
+    // 2. Try ExtractIconExW from full_exe_path or resolved Windows location
+    let resolved_path = {
+        let p = std::path::Path::new(full_exe_path);
+        if !full_exe_path.is_empty() && p.is_absolute() && p.exists() {
+            full_exe_path.to_string()
+        } else {
+            let res = resolve_common_windows_exe(proc_stem);
+            if !res.is_empty() {
+                res
+            } else if !full_exe_path.is_empty() {
+                resolve_common_windows_exe(full_exe_path)
+            } else {
+                String::new()
+            }
+        }
+    };
+
+    if !resolved_path.is_empty() {
+        use windows_sys::Win32::UI::Shell::ExtractIconExW;
+        use windows_sys::Win32::UI::WindowsAndMessaging::DestroyIcon;
+
+        let wide: Vec<u16> = resolved_path.encode_utf16().chain(std::iter::once(0)).collect();
+        let mut hicon_large: windows_sys::Win32::UI::WindowsAndMessaging::HICON = 0;
+        let mut hicon_small: windows_sys::Win32::UI::WindowsAndMessaging::HICON = 0;
+
+        let _ = unsafe {
+            ExtractIconExW(
+                wide.as_ptr(),
+                0,
+                &mut hicon_large,
+                &mut hicon_small,
+                1,
+            )
+        };
+
+        let chosen = if hicon_large != 0 {
+            hicon_large
+        } else if hicon_small != 0 {
+            hicon_small
+        } else {
+            0
+        };
+
+        if chosen != 0 {
+            let res = hicon_to_png_base64(chosen);
+            unsafe {
+                if hicon_large != 0 {
+                    DestroyIcon(hicon_large);
+                }
+                if hicon_small != 0 {
+                    DestroyIcon(hicon_small);
+                }
+            }
+            if let Some(data_url) = res {
+                if !cache_key.is_empty() {
+                    if let Ok(mut lock) = get_icon_cache().write() {
+                        lock.insert(cache_key, data_url.clone());
+                    }
+                }
+                return Some(data_url);
+            }
+        }
+    }
+
+    None
+}
+
+/// Tauri command to retrieve native application icon by executable path or name
+#[tauri::command]
+pub fn get_app_icon(query: String) -> Option<String> {
+    #[cfg(target_os = "windows")]
+    {
+        extract_windows_icon(0, &query, &query)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let path = std::path::Path::new(&query);
+        if path.is_absolute() && path.exists() {
+            return Some(query);
+        }
+        let resolved = crate::system::resolve_desktop_icon_path(&query);
+        if !resolved.is_empty() {
+            return Some(resolved);
+        }
+        None
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "linux")))]
+    {
+        let _ = query;
+        None
+    }
+}
+
+#[cfg(target_os = "windows")]
 fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, String, String) {
     let lower_stem = proc_stem.to_lowercase();
     let lower_title = title_clean.to_lowercase();
@@ -592,8 +974,11 @@ fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, Stri
     if lower_stem == "explorer" {
         return ("Explorador de archivos".to_string(), "explorer".to_string(), "files".to_string());
     }
-    if lower_stem == "windowsterminal" || lower_stem == "powershell" || lower_stem == "cmd" {
-        return ("Terminal".to_string(), "terminal".to_string(), "terminal".to_string());
+    if lower_stem == "windowsterminal" || lower_stem == "powershell" {
+        return ("PowerShell".to_string(), "powershell".to_string(), "powershell".to_string());
+    }
+    if lower_stem == "cmd" {
+        return ("Símbolo del sistema".to_string(), "cmd".to_string(), "cmd".to_string());
     }
     if lower_stem.contains("spotify") || lower_title.contains("spotify") {
         return ("Spotify".to_string(), "spotify".to_string(), "spotify".to_string());
@@ -608,10 +993,13 @@ fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, Stri
         return ("Steam".to_string(), "steam".to_string(), "steam".to_string());
     }
     if lower_stem.contains("taskmgr") {
-        return ("Administrador de tareas".to_string(), "taskmgr".to_string(), "settings".to_string());
+        return ("Administrador de tareas".to_string(), "taskmgr".to_string(), "taskmgr".to_string());
     }
     if lower_stem.contains("systemsettings") || lower_title.contains("configuración") || lower_title.contains("settings") {
         return ("Configuración".to_string(), "settings".to_string(), "settings".to_string());
+    }
+    if lower_stem.contains("notepad") {
+        return ("Bloc de notas".to_string(), "notepad".to_string(), "notepad".to_string());
     }
 
     let display_name = if !proc_stem.is_empty() {
@@ -671,6 +1059,7 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
         let mut pid = 0u32;
         GetWindowThreadProcessId(hwnd, &mut pid);
         let mut proc_stem = String::new();
+        let mut full_exe_path = String::new();
         if pid != 0 {
             let h_proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
             if h_proc != 0 {
@@ -678,6 +1067,7 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
                 let mut p_len = p_buf.len() as u32;
                 if QueryFullProcessImageNameW(h_proc, 0, p_buf.as_mut_ptr(), &mut p_len) != 0 && p_len > 0 {
                     let full_path = String::from_utf16_lossy(&p_buf[..p_len as usize]);
+                    full_exe_path = full_path.clone();
                     if let Some(s) = std::path::Path::new(&full_path).file_stem().and_then(|x| x.to_str()) {
                         proc_stem = s.to_string();
                     }
@@ -699,8 +1089,13 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
 
         let hwnd_val = hwnd as usize;
         let id = format!("{}", hwnd_val);
-        let (app_name, window_class, icon) = map_windows_process_info(&proc_stem, title_clean);
-        let is_active = (hwnd == GetForegroundWindow());
+        let (app_name, window_class, mut icon) = map_windows_process_info(&proc_stem, title_clean);
+        let fg = GetForegroundWindow();
+        let is_active = (hwnd == fg);
+
+        if let Some(real_icon) = extract_windows_icon(hwnd, &full_exe_path, &proc_stem) {
+            icon = real_icon;
+        }
 
         windows.push(OpenWindowItem {
             id: id.clone(),

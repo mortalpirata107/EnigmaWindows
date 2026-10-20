@@ -81,6 +81,11 @@ function pathsFromDataTransfer(dt: DataTransfer): string[] {
  */
 const IconGlyph: React.FC<{ icon: string; name: string }> = ({ icon, name }) => {
   const [hasError, setHasError] = React.useState(false);
+
+  React.useEffect(() => {
+    setHasError(false);
+  }, [icon]);
+
   const isAbsPath = icon.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(icon);
   const isUrl = /^(https?:|data:|asset:)/.test(icon);
   if (!hasError && (isAbsPath || isUrl)) {
@@ -95,7 +100,7 @@ const IconGlyph: React.FC<{ icon: string; name: string }> = ({ icon, name }) => 
       />
     );
   }
-  return <AppIcon windowClass={icon} appName={name} />;
+  return <AppIcon iconPath={icon} windowClass={icon} appName={name} />;
 };
 
 export const DockIcon: React.FC<DockIconProps> = ({
@@ -201,20 +206,60 @@ export const DockIcon: React.FC<DockIconProps> = ({
   const displayName = name.length > 28 ? name.slice(0, 26) + '…' : name;
   const badgeText = badgeCount > 99 ? '99+' : String(badgeCount);
 
+  const pointerDownRef = useRef<{ x: number; y: number; time: number } | null>(null);
+  const isDraggingRef = useRef(false);
+  const lastClickRef = useRef<number>(0);
+
+  const triggerClick = () => {
+    if (isDraggingRef.current) return;
+    const now = Date.now();
+    if (now - lastClickRef.current < 250) return;
+    lastClickRef.current = now;
+    onClick();
+  };
+
   return (
     <div
       ref={ref}
       data-dock-app-id={appId}
       draggable={draggable}
-      onDragStart={onDragStartItem}
+      onDragStart={(e) => {
+        isDraggingRef.current = true;
+        onDragStartItem?.(e);
+      }}
       onDragOver={(e) => {
         e.preventDefault();
         onDragOverItem?.(e);
       }}
       onDragLeave={onDragLeaveItem}
-      onDragEnd={onDragEndItem}
+      onDragEnd={(e) => {
+        isDraggingRef.current = false;
+        onDragEndItem?.(e);
+      }}
       onPointerEnter={onHover}
-      onClick={onClick}
+      onMouseMove={(e) => {
+        if (!isDraggingRef.current) {
+          mouseX.set(e.clientX);
+        }
+      }}
+      onPointerDown={(e) => {
+        if (e.button === 0) {
+          isDraggingRef.current = false;
+          pointerDownRef.current = { x: e.clientX, y: e.clientY, time: Date.now() };
+        }
+      }}
+      onPointerUp={(e) => {
+        if (e.button === 0 && pointerDownRef.current) {
+          const dx = Math.abs(e.clientX - pointerDownRef.current.x);
+          const dy = Math.abs(e.clientY - pointerDownRef.current.y);
+          const dt = Date.now() - pointerDownRef.current.time;
+          pointerDownRef.current = null;
+          if (!isDraggingRef.current && dx < 20 && dy < 20 && dt < 600) {
+            triggerClick();
+          }
+        }
+      }}
+      onClick={triggerClick}
       onContextMenu={onContextMenu}
       onDrop={(e) => {
         e.preventDefault();
