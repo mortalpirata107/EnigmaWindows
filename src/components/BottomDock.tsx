@@ -66,16 +66,16 @@ function matchKeysFor(app: PinnedApp): string[] {
     rawKeys.push('edge', 'msedge', 'microsoft-edge');
   }
   if (app.id === 'taskmgr' || app.icon === 'taskmgr') {
-    rawKeys.push('taskmgr', 'taskmanager', 'task manager');
+    rawKeys.push('taskmgr', 'taskmanager', 'task manager', 'administrador de tareas');
   }
   if (app.id === 'files' || app.icon === 'explorer' || app.icon === 'files') {
-    rawKeys.push('explorer', 'files', 'dolphin', 'nautilus');
+    rawKeys.push('explorer', 'files', 'dolphin', 'nautilus', 'explorador de archivos');
   }
   if (app.id === 'terminal' || app.icon === 'powershell') {
-    rawKeys.push('powershell', 'pwsh', 'cmd', 'windowsterminal', 'terminal', 'kitty', 'konsole');
+    rawKeys.push('powershell', 'pwsh', 'cmd', 'windowsterminal', 'terminal', 'kitty', 'konsole', 'símbolo del sistema');
   }
   if (app.id === 'settings' || app.icon === 'settings') {
-    rawKeys.push('settings', 'systemsettings', 'configuracion');
+    rawKeys.push('settings', 'systemsettings', 'configuracion', 'configuración');
   }
 
   return Array.from(new Set(rawKeys.map(k => k.toLowerCase()).filter(k => k.length >= 3)));
@@ -183,37 +183,31 @@ export const BottomDock: React.FC = () => {
     };
   }, [mouseX]);
 
-  // Modo Seelen UI: Sustitución de barra de tareas de Windows nativa
-  const [isTaskbarHidden, setIsTaskbarHidden] = useState<boolean>(true);
-
+  // Ocultar barra de tareas nativa de Windows en el arranque (Enigma Dock asume el rol del shell)
   useEffect(() => {
-    // Al iniciar, ocultar barra de tareas para actuar como sustituto nativo (Seelen UI style)
-    invoke<boolean>('set_windows_taskbar_visible', { visible: false })
-      .then(() => setIsTaskbarHidden(true))
-      .catch(() => {});
+    invoke<boolean>('set_windows_taskbar_visible', { visible: false }).catch(() => {});
   }, []);
 
-  const toggleTaskbar = useCallback(() => {
-    invoke<boolean>('toggle_windows_taskbar')
-      .then(visible => setIsTaskbarHidden(!visible))
-      .catch(() => {});
+  // Escuchar conmutación del selector de apps desde tecla Windows / atajo global
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listen('toggle-launcher', () => {
+      setIsHovered(true);
+      setIsLauncherOpen((prev) => !prev);
+    }).then(u => { unlisten = u; }).catch(() => {});
+
+    return () => {
+      if (unlisten) unlisten();
+    };
   }, []);
 
   // =========================================================================
-  // MONITOR DE PROCESOS Y APLICACIONES DINÁMICAS (Rust Backend)
+  // MONITOR DE APLICACIONES DINÁMICAS (Rust Backend)
   // =========================================================================
-  const [runningProcesses, setRunningProcesses] = useState<string[]>([]);
   const [runningAppsFromRust, setRunningAppsFromRust] = useState<RunningApp[]>([]);
 
   useEffect(() => {
-    let unlistenProcs: (() => void) | undefined;
     let unlistenApps: (() => void) | undefined;
-
-    listen<string[]>('running-processes-update', (e) => {
-      if (Array.isArray(e.payload)) {
-        setRunningProcesses(e.payload);
-      }
-    }).then(u => { unlistenProcs = u; }).catch(() => {});
 
     listen<RunningApp[]>('running-apps-update', (e) => {
       if (Array.isArray(e.payload)) {
@@ -222,7 +216,6 @@ export const BottomDock: React.FC = () => {
     }).then(u => { unlistenApps = u; }).catch(() => {});
 
     return () => {
-      if (unlistenProcs) unlistenProcs();
       if (unlistenApps) unlistenApps();
     };
   }, []);
@@ -287,22 +280,8 @@ export const BottomDock: React.FC = () => {
       const active = wins.find(w => w.is_active);
       const procName = processNameFor(p);
 
-      const execLower = p.exec.toLowerCase();
-      const execBin = (p.exec.trim().split(/\s+/)[0] || '').split('/').pop()?.toLowerCase() || '';
-      const nameLower = p.name.toLowerCase();
-
-      // Detección Inteligente de Procesos (Fuzzy Matching con includes)
-      const isProcessRunning = runningProcesses.some(process => {
-        const procLower = process.toLowerCase();
-        return (
-          procLower.includes(execLower) ||
-          execLower.includes(procLower) ||
-          (execBin && (procLower.includes(execBin) || execBin.includes(procLower))) ||
-          (nameLower && (procLower.includes(nameLower) || nameLower.includes(procLower)))
-        );
-      });
-
-      const isRunning = isProcessRunning || wins.length > 0;
+      // Detección 100% Real de Windows: una aplicación está abierta si y solo si tiene ventanas reales abiertas
+      const isRunning = wins.length > 0;
       const realWinIcon = wins.find(w => w.icon && (w.icon.startsWith('data:') || w.icon.startsWith('/') || /^[a-zA-Z]:[/\\]/.test(w.icon)))?.icon;
       const effectiveIcon = realWinIcon || nativeIcons[p.id] || p.icon;
 
@@ -385,7 +364,7 @@ export const BottomDock: React.FC = () => {
       pinnedApps: filteredPinned,
       runningUnpinnedApps: filteredUnpinned,
     };
-  }, [pinned, nativeIcons, windows, runningAppsFromRust, apps, quitIds, badges, bouncingIds, runningProcesses]);
+  }, [pinned, nativeIcons, windows, runningAppsFromRust, apps, quitIds, badges, bouncingIds]);
 
   const allApps = useMemo(() => [...pinnedApps, ...runningUnpinnedApps], [pinnedApps, runningUnpinnedApps]);
 
@@ -395,7 +374,7 @@ export const BottomDock: React.FC = () => {
     const totalApps = pinnedApps.length + runningUnpinnedApps.length;
     const currentIconSize = visualSettings.dock_size || DOCK_ICON_SIZE;
     const appsWidth = totalApps * currentIconSize + Math.max(0, totalApps - 1) * DOCK_ICON_GAP;
-    const startWidth = currentIconSize * 2 + 8; // Start button + Taskbar toggle button
+    const startWidth = currentIconSize; // Botón único de Selector de Aplicaciones (Tecla Windows)
     const sepWidth = 2 * 18;
     const dividerWidth = runningUnpinnedApps.length > 0 ? 12 : 0;
     const musicWidth = 190;
@@ -1235,8 +1214,8 @@ export const BottomDock: React.FC = () => {
               className="flex items-center gap-2 px-3 overflow-visible"
             >
               {/* =================================================================
-                  1. BOTÓN "START" (Extremo Izquierdo)
-                  Botón físico extruido con cuadrícula de micro-LEDs en rojo
+                  1. BOTÓN ÚNICO "INICIO / SELECTOR DE APPS" (Extremo Izquierdo)
+                  Unifica el lanzador de aplicaciones y sustituye la función de la tecla Windows.
                   ================================================================= */}
               <button
                 id="enigma-start-btn"
@@ -1248,7 +1227,7 @@ export const BottomDock: React.FC = () => {
                     ? 'neu-inset border border-[#EF4444]'
                     : 'neu-extruded'
                 }`}
-                title="Enigma Launcher (Menú de Inicio)"
+                title="Selector de Aplicaciones (Tecla Windows / Inicio)"
               >
                 <div className="grid grid-cols-2 gap-1 p-2">
                   <div className="w-2.5 h-2.5 rounded-[2px] neu-led-red" />
@@ -1256,27 +1235,6 @@ export const BottomDock: React.FC = () => {
                   <div className="w-2.5 h-2.5 rounded-[2px] neu-led-red" />
                   <div className="w-2.5 h-2.5 rounded-[2px] neu-led-red" />
                 </div>
-              </button>
-
-              {/* Botón de Sustitución de Barra de Windows (Modo Seelen UI) */}
-              <button
-                id="toggle-taskbar-btn"
-                type="button"
-                onClick={toggleTaskbar}
-                style={{ width: visualSettings.dock_size, height: visualSettings.dock_size }}
-                className={`rounded-2xl flex flex-col items-center justify-center transition-all cursor-pointer flex-shrink-0 relative overflow-hidden active:scale-95 ${
-                  isTaskbarHidden
-                    ? 'neu-inset border border-[#EF4444]/40 text-[#EF4444]'
-                    : 'neu-extruded text-white/70 hover:text-white'
-                }`}
-                title={isTaskbarHidden ? "Modo Seelen UI Activo: Barra de Windows sustituida (Clic para restaurar)" : "Barra de Windows visible (Clic para ocultar y sustituir por Enigma Dock)"}
-              >
-                <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                  <path d="M3 5.5v5.7h8V3.2L3 5.5zm9 5.7h9V2l-9 1.8v7.4zm-9 1.6V18.5l8 2.3v-8H3zm9 0v8l9 1.8v-9.8h-9z"/>
-                </svg>
-                {isTaskbarHidden && (
-                  <div className="w-1.5 h-1.5 rounded-full neu-led-red mt-0.5" />
-                )}
               </button>
 
               {/* =================================================================

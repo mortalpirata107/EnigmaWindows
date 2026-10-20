@@ -1013,11 +1013,13 @@ fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, Stri
 #[cfg(target_os = "windows")]
 #[tauri::command]
 pub fn get_open_windows() -> Vec<OpenWindowItem> {
-    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, CloseHandle};
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT, CloseHandle};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         EnumWindows, GetWindowTextW, GetWindowTextLengthW, IsWindowVisible, GetForegroundWindow,
-        GetWindowThreadProcessId
+        GetWindowThreadProcessId, GetWindowLongW, GetWindow, GetClassNameW, GetWindowRect, IsIconic,
+        GWL_STYLE, GWL_EXSTYLE, GW_OWNER, WS_CHILD, WS_EX_TOOLWINDOW, WS_EX_APPWINDOW,
     };
+    use windows_sys::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
     use windows_sys::Win32::System::Threading::{
         OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, QueryFullProcessImageNameW
     };
@@ -1027,12 +1029,75 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
 
     unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let windows = &mut *(lparam as *mut Vec<OpenWindowItem>);
+
+        // 1. Debe ser una ventana visible
         if IsWindowVisible(hwnd) == 0 {
             return 1;
         }
 
+        // 2. Debe tener título no vacío
         let len = GetWindowTextLengthW(hwnd);
         if len == 0 {
+            return 1;
+        }
+
+        // 3. Reglas estándar de la barra de tareas de Windows (Estilos y Jerarquía)
+        let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+        let ex_style = GetWindowLongW(hwnd, GWL_EXSTYLE) as u32;
+
+        // Descartar ventanas hijas (child windows)
+        if (style & WS_CHILD) != 0 {
+            return 1;
+        }
+
+        // Descartar tool windows a menos que indiquen explícitamente ser app windows
+        if (ex_style & WS_EX_TOOLWINDOW) != 0 && (ex_style & WS_EX_APPWINDOW) == 0 {
+            return 1;
+        }
+
+        // Descartar ventanas con dueño/parent (diálogos modales dependientes) a menos que sean app window
+        let owner = GetWindow(hwnd, GW_OWNER);
+        if owner != 0 && (ex_style & WS_EX_APPWINDOW) == 0 {
+            return 1;
+        }
+
+        // 4. Filtrar ventanas cloaked / invisibles / suspendidas por DWM (UWP suspendidas, escritorios inactivos)
+        let mut cloaked: u32 = 0;
+        let hr = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_CLOAKED as u32,
+            &mut cloaked as *mut _ as *mut _,
+            std::mem::size_of::<u32>() as u32,
+        );
+        if hr == 0 && cloaked != 0 {
+            return 1;
+        }
+
+        // 5. Geometría física real: si no está minimizada, debe tener dimensiones mayores a 0
+        let is_minimized = IsIconic(hwnd) != 0;
+        if !is_minimized {
+            let mut rect: RECT = std::mem::zeroed();
+            GetWindowRect(hwnd, &mut rect);
+            if rect.right <= rect.left || rect.bottom <= rect.top {
+                return 1;
+            }
+        }
+
+        // 6. Filtrar clases del sistema, barras de tareas y fondos de escritorio
+        let mut class_buf = [0u16; 256];
+        let class_len = GetClassNameW(hwnd, class_buf.as_mut_ptr(), class_buf.len() as i32);
+        let class_name = if class_len > 0 {
+            String::from_utf16_lossy(&class_buf[..class_len as usize])
+        } else {
+            String::new()
+        };
+        let class_lower = class_name.to_lowercase();
+        if class_lower == "progman"
+            || class_lower == "workerw"
+            || class_lower == "shell_traywnd"
+            || class_lower == "shell_secondarytraywnd"
+            || class_lower == "enigmaos_appbar"
+        {
             return 1;
         }
 
@@ -1051,6 +1116,8 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
             || title_clean == "EnigmaDock"
             || title_clean == "Windows Input Experience"
             || title_clean == "Shell Infrastructure Host"
+            || title_clean == "Default IME"
+            || title_clean == "MSCTFIME UI"
         {
             return 1;
         }
@@ -1083,6 +1150,10 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
             || lower_stem == "textinputhost"
             || lower_stem == "enigmaos"
             || lower_stem == "startmenuexperiencehost"
+            || lower_stem == "systemsettingsbroker"
+            || lower_stem == "runtimebroker"
+            || lower_stem == "taskhostw"
+            || lower_stem == "lockapp"
         {
             return 1;
         }

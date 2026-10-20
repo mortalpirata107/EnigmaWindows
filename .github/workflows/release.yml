@@ -52,10 +52,9 @@ jobs:
             - **Paquete MSI (`.msi`):** Instalador para entornos corporativos y estándar de Windows.
             
             ✨ **Novedades de esta versión:**
-            - **Detección Precisa del Cursor en el Dock e Histéresis:** Eliminados los fallos de selección de apps y la fuga de clics hacia el escritorio. Introducida histéresis de 160ms, buffer perimetral de 8px y desacoplamiento de drag-and-drop HTML5 con tolerancia a jitter para clics instantáneos.
-            - **Extracción de Iconos y Logos Reales de Windows (Win32):** Integración con `WM_GETICON`, `GetClassLongPtrW` y `ExtractIconExW` codificados a PNG 32-bit en tiempo real. Erradicados los recuadros rojos "NA" y los iconos genéricos de KDE para apps de Windows (Settings, Edge, Explorador, Bloc de notas, etc.).
-            - **Fallback Automático de Ejecución:** Si una app está en segundo plano o el foco Win32 no responde, el Dock lanza el ejecutable nativamente sin bloquearse.
-            - **Modo Sigiloso y Margen Superior para Maximizadas:** Telemetría en memoria sin consolas emergentes y reserva de WorkArea de 38px en la parte superior.
+            - **Detección 100% Real de Apps Abiertas en Windows:** Filtro exhaustivo de ventanas de nivel superior (IsWindowVisible, descarte de procesos en segundo plano, ventanas cloaked/suspendidas de UWP con DWMWA_CLOAKED, child windows y tool windows sin WS_EX_APPWINDOW). Las aplicaciones en el Dock solo se muestran como abiertas si tienen ventanas reales activas.
+            - **Unificación de Tecla Windows y Selector de Apps:** Eliminado el botón duplicado redundante en el Dock. El extremo izquierdo ahora cuenta con un único botón para el selector de apps / Enigma Launcher. Integración de gancho de teclado nativo de bajo nivel (`WH_KEYBOARD_LL`) para capturar la pulsación de la tecla Windows (`VK_LWIN`/`VK_RWIN`) y conmutar el lanzador sustituyendo el menú clásico de Windows.
+            - **Integración Nativa Win32 AppBar (Estilo Seelen UI) y Reserva de WorkArea:** Implementado registro formal de AppBar en el Shell de Windows (`SHAppBarMessage` con `ABM_NEW` y `ABM_SETPOS` en `ABE_TOP`) combinado con `SystemParametersInfoW(SPI_SETWORKAREA)` calibrado a 52px (con escalado DPI dinámico) y centinela protector en memoria. Las ventanas maximizadas jamás se solapan ni quedan ocultas detrás del TopBar.
           releaseDraft: false
           prerelease: false
           args: ''

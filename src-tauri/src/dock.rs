@@ -395,3 +395,27 @@ pub fn save_visual_settings(settings: VisualSettings, app: tauri::AppHandle) -> 
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_exec() {
+        assert_eq!(clean_exec("code %F"), "code");
+        assert_eq!(clean_exec("google-chrome --profile %u"), "google-chrome --profile");
+    }
+
+    #[test]
+    fn test_split_exec() {
+        let tokens = split_exec("vlc --fullscreen \"my file.mp4\"");
+        assert_eq!(tokens, vec!["vlc", "--fullscreen", "my file.mp4"]);
+    }
+
+    #[test]
+    fn test_default_visual_settings() {
+        let s = VisualSettings::default();
+        assert_eq!(s.theme, "crimson");
+        assert_eq!(s.dock_size, 48);
+    }
+}
+
