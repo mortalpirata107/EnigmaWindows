@@ -7,6 +7,7 @@ import { RichMessageText } from './RichMessageText';
 import { ModuleCategoryTabs } from './ModuleCategoryTabs';
 import { NotesView, NoteRecord } from './NotesView';
 import { PersonaSelector, getPersonaMetadata } from './PersonaSelector';
+import { OllamaSetupCard, OllamaStatusData } from './OllamaSetupCard';
 
 export type EnigmaView = 'menu' | 'chat' | 'calendar' | 'tasks' | 'schedule' | 'notes' | 'settings' | 'extensions' | 'contacts';
 
@@ -470,6 +471,65 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
     }
   };
 
+  // ==========================================
+  // ESTADO REAL: OLLAMA LOCAL & MODELOS
+  // ==========================================
+  const [ollamaInfo, setOllamaInfo] = useState<OllamaStatusData>({
+    connected: false,
+    installed_models: [],
+    loading: true,
+  });
+
+  const fetchOllamaInfo = async () => {
+    setOllamaInfo((prev) => ({ ...prev, loading: true }));
+    try {
+      const data = await invoke<any>('get_model_config_cmd');
+      setOllamaInfo({
+        config: data?.config,
+        connected: !!data?.connected,
+        installed_models: data?.installed_models || [],
+        config_file_path: data?.config_file_path,
+        loading: false,
+      });
+    } catch (err) {
+      console.error('[EnigmaHub] Error fetching ollama info:', err);
+      setOllamaInfo((prev) => ({ ...prev, connected: false, loading: false }));
+    }
+  };
+
+  // ==========================================
+  // ESTADO REAL: PERFIL DEL OPERADOR / USUARIO
+  // ==========================================
+  const [operatorName, setOperatorName] = useState<string>('Operador');
+  const [isSavingProfile, setIsSavingProfile] = useState<boolean>(false);
+  const [profileSavedFeedback, setProfileSavedFeedback] = useState<boolean>(false);
+
+  const fetchUserProfile = async () => {
+    try {
+      const prof = await invoke<any>('get_user_profile');
+      if (prof && prof.user_name) {
+        setOperatorName(prof.user_name);
+      }
+    } catch (err) {
+      console.error('[EnigmaHub] Error fetching user profile:', err);
+    }
+  };
+
+  const handleSaveUserProfile = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!operatorName.trim()) return;
+    setIsSavingProfile(true);
+    try {
+      await invoke('save_user_profile', { userName: operatorName.trim() });
+      setProfileSavedFeedback(true);
+      setTimeout(() => setProfileSavedFeedback(false), 2500);
+    } catch (err) {
+      console.error('[EnigmaHub] Error saving user profile:', err);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   useEffect(() => {
     invoke<ScheduleBlock[]>('get_schedules')
       .then(setSchedules)
@@ -482,6 +542,8 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
     fetchWhatsAppContacts();
     fetchGoogleStatus();
     fetchTelegramStatus();
+    fetchOllamaInfo();
+    fetchUserProfile();
 
     let unlistenWa: (() => void) | undefined;
     listen('whatsapp-sent', () => {
@@ -511,6 +573,9 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
       fetchWhatsAppContacts();
       fetchGoogleStatus();
       fetchTelegramStatus();
+    } else if (activeView === 'settings' || activeView === 'chat') {
+      fetchOllamaInfo();
+      fetchUserProfile();
     }
   }, [activeView]);
 
@@ -1190,8 +1255,20 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
                   {/* Badges en tiempo real en la esquina superior derecha (Pozos Inset Neumórficos) */}
                   {item.id === 'chat' && (
                     <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full neu-inset text-[10px] font-mono text-white">
-                      <span className="w-1.5 h-1.5 rounded-full neu-led-red animate-pulse" />
-                      Live
+                      <span
+                        className={`w-1.5 h-1.5 rounded-full ${
+                          !ollamaInfo.connected
+                            ? 'bg-zinc-500'
+                            : ollamaInfo.installed_models.length === 0
+                            ? 'bg-amber-400 animate-pulse'
+                            : 'neu-led-red animate-pulse'
+                        }`}
+                      />
+                      {!ollamaInfo.connected
+                        ? 'Offline'
+                        : ollamaInfo.installed_models.length === 0
+                        ? 'Sin IA'
+                        : 'Live'}
                     </span>
                   )}
                   {item.id === 'vision' && (
@@ -1236,9 +1313,21 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
                   {item.id === 'chat' && (
                     <>
                       <div className="text-xs text-white/90 font-medium truncate">
-                        {activePersona ? getPersonaMetadata(activePersona).name : 'DeepSeek-R1 / Ollama'}
+                        {activePersona
+                          ? getPersonaMetadata(activePersona).name
+                          : !ollamaInfo.connected
+                          ? 'Ollama Desconectado'
+                          : ollamaInfo.installed_models.length === 0
+                          ? 'Sin Modelos de IA'
+                          : ollamaInfo.installed_models[0] || 'DeepSeek-R1 / Ollama'}
                       </div>
-                      <div className="text-[11px] text-white/40 truncate">IA conversacional y ejecución local</div>
+                      <div className="text-[11px] text-white/40 truncate">
+                        {!ollamaInfo.connected
+                          ? 'Toca para iniciar o configurar Ollama'
+                          : ollamaInfo.installed_models.length === 0
+                          ? 'Toca para descargar un modelo'
+                          : `${ollamaInfo.installed_models.length} modelos locales listos`}
+                      </div>
                     </>
                   )}
 
@@ -1379,12 +1468,28 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
               ref={chatScrollRef}
               className="max-h-[420px] overflow-y-auto w-full flex flex-col pr-1.5 pb-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
             >
+              {/* Si Ollama está offline o sin modelos y hay mensajes previos, mostrar aviso compacto */}
+              {messages.length > 0 &&
+                !ollamaInfo.loading &&
+                (!ollamaInfo.connected || ollamaInfo.installed_models.length === 0) && (
+                  <div className="mb-3">
+                    <OllamaSetupCard ollamaInfo={ollamaInfo} onRefresh={fetchOllamaInfo} compact />
+                  </div>
+                )}
+
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] shadow-[0_0_12px_rgba(239,68,68,0.9)] animate-ping mb-3" />
-                  <p className="text-sm text-white font-medium">Escribe o dicta tu consulta en la barra superior</p>
-                  <p className="text-xs text-white/40 mt-1">Enigma responderá al instante con voz e inteligencia local.</p>
-                </div>
+                !ollamaInfo.loading &&
+                (!ollamaInfo.connected || ollamaInfo.installed_models.length === 0) ? (
+                  <div className="py-2">
+                    <OllamaSetupCard ollamaInfo={ollamaInfo} onRefresh={fetchOllamaInfo} />
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 text-center">
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#EF4444] shadow-[0_0_12px_rgba(239,68,68,0.9)] animate-ping mb-3" />
+                    <p className="text-sm text-white font-medium">Escribe o dicta tu consulta en la barra superior</p>
+                    <p className="text-xs text-white/40 mt-1">Enigma responderá al instante con voz e inteligencia local.</p>
+                  </div>
+                )
               ) : (
                 messages.map((msg, idx) => (
                   <React.Fragment key={msg.id || idx}>
@@ -1798,6 +1903,45 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             transition={{ duration: 0.15 }}
             className="w-full flex flex-col max-h-[380px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
           >
+            {/* Perfil del Operador / Usuario */}
+            <div className="p-3.5 rounded-2xl neu-extruded flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-white flex items-center gap-2">
+                    <span>Perfil del Operador / Usuario</span>
+                    {profileSavedFeedback && (
+                      <span className="text-[10px] text-green-400 font-mono">
+                        ✓ Guardado
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-white/50">
+                    Nombre con el que Enigma interactuará contigo en prompts, memoria y voz.
+                  </div>
+                </div>
+                <span className="text-[10px] font-mono text-white/70 neu-inset px-2.5 py-0.5 rounded-md">
+                  Dinámico
+                </span>
+              </div>
+              <form onSubmit={handleSaveUserProfile} className="flex items-center gap-2 mt-0.5">
+                <input
+                  type="text"
+                  value={operatorName}
+                  onChange={(e) => setOperatorName(e.target.value)}
+                  placeholder="Ej: Operador, Alex..."
+                  className="flex-1 neu-inset bg-[#070709] border border-red-950/40 rounded-xl px-3 py-1.5 text-xs text-white placeholder-white/30 focus:outline-none focus:border-[#EF4444]"
+                />
+                <button
+                  type="submit"
+                  disabled={isSavingProfile || !operatorName.trim()}
+                  className="px-3 py-1.5 rounded-xl text-xs font-medium neu-extruded bg-[#b82a2a]/20 border border-[#b82a2a]/40 text-[#e05050] hover:text-white hover:bg-[#b82a2a]/40 transition-all cursor-pointer disabled:opacity-40"
+                >
+                  {isSavingProfile ? 'Guardando...' : 'Guardar'}
+                </button>
+              </form>
+            </div>
+
+            {/* Voz Piper TTS */}
             <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/10 flex items-center justify-between">
               <div>
                 <div className="text-xs font-semibold text-white">Voz Piper TTS (Dave)</div>
@@ -1816,15 +1960,88 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
               </button>
             </div>
 
-            <div className="p-3 rounded-2xl neu-extruded flex items-center justify-between">
-              <div>
-                <div className="text-xs font-semibold text-white">Modelo Ollama</div>
-                <div className="text-[10px] text-white/50">deepseek-r1:14b en local con Tool Calling.</div>
+            {/* Modelo Ollama & IA Local Dinámico */}
+            <div className="p-3.5 rounded-2xl neu-extruded flex flex-col gap-2.5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xs font-semibold text-white">Ollama Local & Modelos</div>
+                  <div className="text-[10px] text-white/50">
+                    {ollamaInfo.loading
+                      ? 'Comprobando estado de Ollama...'
+                      : ollamaInfo.connected
+                      ? `Servicio activo en 127.0.0.1:11434 (${ollamaInfo.installed_models.length} modelos detectados)`
+                      : 'Servicio no detectado en http://127.0.0.1:11434'}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={fetchOllamaInfo}
+                    disabled={ollamaInfo.loading}
+                    className="p-1 rounded-lg neu-extruded text-white/60 hover:text-white cursor-pointer"
+                    title="Actualizar estado de Ollama"
+                  >
+                    <svg
+                      className={`w-3.5 h-3.5 ${ollamaInfo.loading ? 'animate-spin' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                      />
+                    </svg>
+                  </button>
+                  <span className="text-xs font-mono text-white neu-inset px-2.5 py-0.5 rounded-md flex items-center gap-1.5">
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        ollamaInfo.connected
+                          ? ollamaInfo.installed_models.length > 0
+                            ? 'neu-led-red animate-pulse'
+                            : 'bg-amber-400 animate-pulse'
+                          : 'bg-zinc-600'
+                      }`}
+                    />
+                    {ollamaInfo.loading
+                      ? 'Comprobando'
+                      : ollamaInfo.connected
+                      ? ollamaInfo.installed_models.length > 0
+                        ? 'Conectado'
+                        : '0 Modelos'
+                      : 'Desconectado'}
+                  </span>
+                </div>
               </div>
-              <span className="text-xs font-mono text-white neu-inset px-2.5 py-0.5 rounded-md flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full neu-led-red animate-pulse" />
-                Conectado
-              </span>
+
+              {ollamaInfo.installed_models.length > 0 ? (
+                <div className="flex flex-col gap-1.5 pt-1.5 border-t border-white/5">
+                  <div className="text-[11px] text-white/70 font-medium">Modelos locales instalados:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {ollamaInfo.installed_models.map((model) => (
+                      <span
+                        key={model}
+                        className="text-[10px] font-mono px-2 py-0.5 rounded-md neu-inset text-white/90 border border-red-950/30"
+                      >
+                        {model}
+                      </span>
+                    ))}
+                  </div>
+                  {ollamaInfo.config_file_path && (
+                    <div className="text-[9px] font-mono text-white/30 truncate mt-0.5">
+                      Config: {ollamaInfo.config_file_path}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <OllamaSetupCard
+                  ollamaInfo={ollamaInfo}
+                  onRefresh={fetchOllamaInfo}
+                  compact
+                />
+              )}
             </div>
 
             <div className="p-3 rounded-2xl neu-extruded flex items-center justify-between">

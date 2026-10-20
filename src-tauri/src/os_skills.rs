@@ -126,8 +126,8 @@ pub fn read_local_file(path: &str) -> Result<String, String> {
     }
 }
 
-/// Ejecuta comandos seguros de bash usando `std::process::Command` y devuelve stdout o stderr.
-/// Aplica salvaguardas estrictas para impedir acciones destructivas en el sistema de Santiago.
+/// Ejecuta comandos seguros usando PowerShell (en Windows) o bash (en Linux/macOS) y devuelve stdout o stderr.
+/// Aplica salvaguardas estrictas para impedir acciones destructivas en el sistema del usuario.
 #[tauri::command]
 pub fn execute_terminal_command(command: &str) -> Result<String, String> {
     let trimmed = command.trim();
@@ -140,7 +140,17 @@ pub fn execute_terminal_command(command: &str) -> Result<String, String> {
 
     eprintln!("[OS_Skills] 💻 Ejecutando comando seguro: '{}'", trimmed);
 
-    // 2. Ejecutar comando mediante bash
+    // 2. Ejecutar comando mediante PowerShell (Windows) o bash (Unix)
+    #[cfg(target_os = "windows")]
+    let output = {
+        use std::os::windows::process::CommandExt;
+        let mut cmd = std::process::Command::new("powershell");
+        cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", trimmed]);
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        cmd.output().map_err(|e| format!("Error ejecutando comando en PowerShell: {}", e))?
+    };
+
+    #[cfg(not(target_os = "windows"))]
     let output = std::process::Command::new("bash")
         .args(["-c", trimmed])
         .output()

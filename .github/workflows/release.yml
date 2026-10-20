@@ -51,11 +51,11 @@ jobs:
             - **Instalador NSIS (`.exe`):** Asistente interactivo de instalación directa.
             - **Paquete MSI (`.msi`):** Instalador para entornos corporativos y estándar de Windows.
             
-            ✨ **Novedades de esta versión:**
-            - **Detección Precisa y Filtrado Riguroso de Apps Abiertas:** Mapeo de identidad autoritario por ejecutable y clase (`CabinetWClass` para Explorador de Archivos, `ApplicationFrameWindow` para apps UWP como Calculadora/Configuración/Fotos). Eliminada la colisión de títulos de pestañas o documentos contra nombres de apps del sistema.
-            - **Protección Anti-Colisiones en el Dock:** El emparejamiento de ventanas en el Dock prioriza la identidad del proceso y clase; nunca confunde una pestaña de navegador ("GitHub Settings") con la app nativa de Configuración.
-            - **Win32 AppBar de Alto Rendimiento sin Condiciones de Carrera:** Inicialización atómica segura con guardas de concurrencia, soporte nativo multimonitor con `GetMonitorInfoW` (`rcMonitor`), cálculo preciso de WorkArea ante DPI variable y respuesta inmediata a eventos `ABN_POSCHANGED`.
-            - **Unificación de Tecla Windows y Gancho de Bajo Nivel:** Selector de apps unificado con gancho `WH_KEYBOARD_LL` insensible a auto-repetición de teclas y sincronización idéntica en Linux evdev.
+            ✨ **Novedades de esta versión (v1.1.14):**
+            - **Atajos Globales de Windows Fiables:** Intercepción a bajo nivel mediante gancho `WH_KEYBOARD_LL` con seguimiento preciso de estado: tecla `Win` única para Enigma Launcher (`toggle-launcher`) suprimiendo el menú de inicio nativo; `Alt + 3` para Enigma AI Hub (`toggle-enigma`); `Alt + Espacio` para Búsqueda Notch (`trigger-search` / `open-search`) suprimiendo el menú del sistema Windows (`SC_KEYMENU`); y `Alt + V` para historial de portapapeles.
+            - **Inhibición Inteligente de Click-Through:** Control atómico de modo interactivo (`MAIN_INTERACTIVE`, `DOCK_INTERACTIVE`) en el rastreador de ratón para impedir que las ventanas se vuelvan transparentes a los eventos de cursor (`set_ignore_cursor_events`) mientras una vista interactiva esté abierta.
+            - **Despersonalización Completa y Perfil Dinámico:** Despersonalización absoluta de todo el código fuente, prompts, memoria persistente SQLite (`enigma_core.md`, personas y scheduler). Personalización dinámica del operador/usuario desde los Ajustes de Enigma Hub con almacenamiento en SQLite (`enigma_settings`).
+            - **Detección y Configuración de IA Local Ollama:** Detección de conectividad en doble endpoint (`127.0.0.1` y `localhost`) e interfaz neumórfica para sistemas sin modelos instalados o con Ollama inactivo, con perfiles Básico, Equilibrado, Alto Rendimiento y Personalizado, y botones de ejecución directa en terminal y copia de comandos.
           releaseDraft: false
           prerelease: false
           args: ''

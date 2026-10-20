@@ -391,7 +391,7 @@ pub fn init_db() -> Result<()> {
             ("34611223344@s.whatsapp.net", "Grigorii"),
             ("34655443322@s.whatsapp.net", "Mamá"),
             ("34666554433@s.whatsapp.net", "Papá"),
-            ("34600112233@s.whatsapp.net", "Santi"),
+            ("34600112233@s.whatsapp.net", "Contacto Demo"),
         ];
         for (jid, name) in default_contacts {
             let _ = conn.execute(

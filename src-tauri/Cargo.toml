@@ -1,8 +1,8 @@
 [package]
 name = "enigmaos"
-version = "1.0.0"
+version = "1.1.14"
 description = "EnigmaOS - AI-Powered Desktop Shell & Intelligence Layer"
-authors = ["mortalpirata107"]
+authors = ["EnigmaOS Contributors"]
 edition = "2021"
 default-run = "enigmaos"
 

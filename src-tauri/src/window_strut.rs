@@ -640,6 +640,29 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
     }
 }
 
+static MAIN_INTERACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DOCK_INTERACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[allow(dead_code)]
+pub fn set_window_interactive_mode(label: &str, interactive: bool) {
+    if label == "main" {
+        MAIN_INTERACTIVE.store(interactive, std::sync::atomic::Ordering::SeqCst);
+    } else if label == "dock" {
+        DOCK_INTERACTIVE.store(interactive, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+#[allow(dead_code)]
+pub fn is_window_interactive(label: &str) -> bool {
+    if label == "main" {
+        MAIN_INTERACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+    } else if label == "dock" {
+        DOCK_INTERACTIVE.load(std::sync::atomic::Ordering::SeqCst)
+    } else {
+        false
+    }
+}
+
 /// Spawns a 60 FPS cursor hit-test tracker on Windows and macOS to dynamically toggle
 /// `set_ignore_cursor_events(false)` when cursor is over the notch/dock, and `true` when outside.
 #[allow(dead_code)]
@@ -652,6 +675,13 @@ pub fn start_mouse_hit_test_tracker(window: WebviewWindow) {
             let mut consecutive_outside_ticks: u32 = 0;
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(16));
+
+                // If window has active keyboard interactivity (search, enigma hub, launcher), keep cursor events active
+                if is_window_interactive(&label) {
+                    consecutive_outside_ticks = 0;
+                    let _ = win.set_ignore_cursor_events(false);
+                    continue;
+                }
                 let cursor = get_cursor_position();
                 let (regions, was_inside) = {
                     let cache = get_region_cache().lock().unwrap();
@@ -818,6 +848,8 @@ pub fn update_custom_input_regions(window: WebviewWindow, regions: Vec<[i32; 4]>
 /// On Windows & macOS: unignores cursor events and sets window focus when interactive.
 #[tauri::command]
 pub fn set_keyboard_interactivity(window: WebviewWindow, enabled: bool, reason: Option<String>) -> Result<(), String> {
+    set_window_interactive_mode(window.label(), enabled);
+
     #[cfg(target_os = "linux")]
     {
         use gtk::glib::translate::ToGlibPtr;

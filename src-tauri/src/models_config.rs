@@ -111,27 +111,34 @@ pub fn save_model_config_to_disk(cfg: &ModelConfig) -> Result<(), String> {
     Ok(())
 }
 
-/// Queries Ollama API `/api/tags` to list all models already installed locally
-pub async fn get_installed_ollama_models() -> Vec<String> {
+/// Queries Ollama API `/api/tags` to list all models already installed locally.
+/// Tests both 127.0.0.1 and localhost for cross-platform reliability on Windows & Linux.
+pub async fn check_ollama_status() -> (bool, Vec<String>) {
     let client = Client::builder()
         .timeout(Duration::from_millis(1500))
         .build()
         .unwrap_or_default();
 
-    let res = match client.get("http://localhost:11434/api/tags").send().await {
-        Ok(r) => r,
-        Err(_) => return Vec::new(),
-    };
-
-    if let Ok(json) = res.json::<Value>().await {
-        if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
-            return models
-                .iter()
-                .filter_map(|item| item.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
-                .collect();
+    let endpoints = ["http://127.0.0.1:11434/api/tags", "http://localhost:11434/api/tags"];
+    for endpoint in endpoints {
+        if let Ok(res) = client.get(endpoint).send().await {
+            if let Ok(json) = res.json::<Value>().await {
+                if let Some(models) = json.get("models").and_then(|m| m.as_array()) {
+                    let list: Vec<String> = models
+                        .iter()
+                        .filter_map(|item| item.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
+                        .collect();
+                    return (true, list);
+                }
+                return (true, Vec::new());
+            }
         }
     }
-    Vec::new()
+    (false, Vec::new())
+}
+
+pub async fn get_installed_ollama_models() -> Vec<String> {
+    check_ollama_status().await.1
 }
 
 /// Resolves a requested model name against locally available models.
@@ -187,11 +194,12 @@ pub async fn resolve_or_fallback_model(preferred: &str, default_fallback: &str) 
 #[tauri::command]
 pub async fn get_model_config_cmd() -> Result<Value, String> {
     let cfg = load_model_config();
-    let installed = get_installed_ollama_models().await;
+    let (connected, installed) = check_ollama_status().await;
     let path = get_models_config_path();
 
     Ok(serde_json::json!({
         "config": cfg,
+        "connected": connected,
         "installed_models": installed,
         "config_file_path": path.to_string_lossy()
     }))

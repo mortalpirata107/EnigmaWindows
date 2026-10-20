@@ -833,7 +833,7 @@ pub fn execute_browser_search(query: &str) -> Result<(), String> {
 
     eprintln!("[execute_browser_search] Abriendo búsqueda en navegador para: '{}' ({})", query, search_url);
 
-    // 1. Intentar con Opera (navegador predeterminado de Santi)
+    // 1. Intentar con navegador web (Opera, Chrome, Firefox, Edge o predeterminado del sistema)
     if Command::new("opera")
         .arg(&search_url)
         .stdin(Stdio::null())
@@ -1389,7 +1389,7 @@ pub async fn invoke_enigma(app: AppHandle, prompt: String) -> Result<(), String>
     eprintln!("[invoke_enigma] Sending prompt to Ollama (deepseek-r1:14b)...");
     stop_speaking();
 
-    // Guardar mensaje de Santiago en la memoria a corto plazo
+    // Guardar mensaje del usuario en la memoria a corto plazo
     let _ = crate::memory::save_message("user", &prompt);
 
     let client = Client::new();
@@ -1721,7 +1721,7 @@ CONTEXTO TEMPORAL DEL SISTEMA: Hoy es {weekday}, {date} y son las {time}.
 TOOL REGISTRY (DEFINICIONES ESTRICTAS DE HERRAMIENTAS):
 - Herramienta `search_web`: UTILIZAR SIEMPRE que el usuario te pida buscar algo en su navegador, en internet o en Google (ej: 've a mi navegador y busca hola', 'busca en la barra de búsqueda X', 'busca en google X').
   Formato JSON: {{"tool": "search_web", "args": {{"query": "texto a buscar"}}}}
-- Herramienta `run_terminal`: UTILIZAR para ejecutar comandos de shell o terminal en el sistema Linux de Santi (ej: 'ls', 'df -h', 'uptime', etc.).
+- Herramienta `run_terminal`: UTILIZAR para ejecutar comandos de shell o terminal en el sistema del usuario (ej: 'ls', 'df -h', 'uptime', etc.).
   Formato JSON: {{"tool": "run_terminal", "args": {{"command": "comando bash"}}}}
 - Herramienta `open_app`: UTILIZAR para abrir aplicaciones del sistema (ej: 'spotify', 'opera', 'discord', 'code', 'firefox').
   Formato JSON: {{"tool": "open_app", "args": {{"app_name": "spotify"}}}}
@@ -1748,10 +1748,10 @@ ESTADO ACTUAL DE LA BASE DE DATOS LOCAL (Resultado de get_calendar_events):
 {calendar_status}
 
 DIRECTIVAS ESTRICTAS DE SISTEMA OPERATIVO, NAVEGADOR, WHATSAPP Y COMUNICACIÓN (MODO JARVIS):
-1. REGLA CRÍTICA DE CONTROL DEL SISTEMA Y NAVEGADOR: Enigma SÍ TIENE control total sobre el sistema operativo Linux de Santi, su terminal y su navegador web Opera. NUNCA digas que no puedes acceder a la terminal, a su navegador o al sistema. Si el usuario te pide ejecutar algo en la terminal, invoca `run_terminal`. Si te pide buscar en su navegador, invoca `search_web`. Si te pide abrir una app, invoca `open_app`. Si te pide cerrar una app, invoca `close_app`.
+1. REGLA CRÍTICA DE CONTROL DEL SISTEMA Y NAVEGADOR: Enigma SÍ TIENE control total sobre el sistema operativo, la terminal y el navegador web del usuario. NUNCA digas que no puedes acceder a la terminal, a su navegador o al sistema. Si el usuario te pide ejecutar algo en la terminal, invoca `run_terminal`. Si te pide buscar en su navegador, invoca `search_web`. Si te pide abrir una app, invoca `open_app`. Si te pide cerrar una app, invoca `close_app`.
 2. REGLA CRÍTICA DE GMAIL: Enigma SÍ TIENE integración oficial con Gmail API mediante Google OAuth 2.0. NUNCA digas que no puedes leer correos, que es imposible o que eres un asistente sin acceso. Si Google Workspace está CONECTADO y el usuario pide ver o leer correos ("lee mis correos", "tengo emails"), invoca la herramienta `get_recent_emails`.
 3. REGLA CRÍTICA DE AGENDA: Si el usuario te pide leer su agenda y la herramienta `get_calendar_events` devuelve un array vacío ([]), DEBES responder exactamente que no tiene nada programado. BAJO NINGÚN CONCEPTO puedes invocar `add_event` para inventar datos falsos.
-4. COMUNICACIÓN VERBAL OBLIGATORIA: Toda respuesta tuya DEBE incluir una explicación hablada completa y directa para Santi. NUNCA devuelvas únicamente un bloque JSON sin texto explicativo.
+4. COMUNICACIÓN VERBAL OBLIGATORIA: Toda respuesta tuya DEBE incluir una explicación hablada completa y directa para el usuario. NUNCA devuelvas únicamente un bloque JSON sin texto explicativo.
 5. WHATSAPP TOOL CALLING: Cuando el usuario te pida enviar un mensaje de WhatsApp (ej: "envía un whatsapp a Grigorii que voy en camino"), DEBES generar el bloque JSON de la herramienta `send_whatsapp`.
 
 REGLAS DE ORO:

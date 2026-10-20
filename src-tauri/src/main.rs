@@ -271,12 +271,33 @@ fn main() {
                         let sc_str = format!("{:?}", shortcut).to_lowercase();
                         if sc_str.contains("space") {
                             eprintln!("[GlobalShortcut:Plugin] Alt+Space pressed! Emitting trigger-search");
+                            if let Some(main_win) = app.get_webview_window("main") {
+                                window_strut::set_window_interactive_mode("main", true);
+                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = main_win.set_focus();
+                            }
+                            let _ = app.emit_to("main", "trigger-search", ());
                             let _ = app.emit("trigger-search", ());
+                            let _ = app.emit_to("main", "open-search", ());
+                            let _ = app.emit("open-search", ());
+                            let _ = app.emit("toggle-search", ());
                         } else if sc_str.contains("keyv") || sc_str.contains("v") {
                             eprintln!("[GlobalShortcut:Plugin] Alt+V pressed! Emitting open-clipboard-history");
+                            if let Some(main_win) = app.get_webview_window("main") {
+                                window_strut::set_window_interactive_mode("main", true);
+                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = main_win.set_focus();
+                            }
+                            let _ = app.emit_to("main", "open-clipboard-history", ());
                             let _ = app.emit("open-clipboard-history", ());
                         } else if sc_str.contains("digit3") || sc_str.contains("3") {
                             eprintln!("[GlobalShortcut:Plugin] Alt+3 pressed! Emitting toggle-enigma");
+                            if let Some(main_win) = app.get_webview_window("main") {
+                                window_strut::set_window_interactive_mode("main", true);
+                                let _ = main_win.set_ignore_cursor_events(false);
+                                let _ = main_win.set_focus();
+                            }
+                            let _ = app.emit_to("main", "toggle-enigma", ());
                             let _ = app.emit("toggle-enigma", ());
                         } else {
                             eprintln!("[GlobalShortcut:Plugin] Shortcut pressed: {:?}", shortcut);
@@ -572,6 +593,8 @@ fn main() {
             memory::save_chat_message,
             memory::get_core_memory,
             memory::save_core_memory,
+            memory::get_user_profile,
+            memory::save_user_profile,
             os_skills::read_local_file,
             os_skills::execute_terminal_command,
             personas::get_available_personas,

@@ -111,7 +111,11 @@ fn strip_thinking_tags(input: &str) -> String {
 /// Genera un mensaje dinámico, cálido y con emojis utilizando el LLM local `gemma4:e4b`
 /// con el System Prompt interno especificado para Enigma.
 pub async fn generate_dynamic_alert_message(event_data: &str) -> String {
-    let system_prompt = "Eres Enigma, el asistente personal de Santiago. Tienes que avisarle de un evento inminente. Redacta un mensaje de Telegram corto, amigable, directo y con emojis adecuados al tema. No añadas introducciones, solo el mensaje que le enviarías.";
+    let user_name = crate::memory::get_current_user_name();
+    let system_prompt = format!(
+        "Eres Enigma, el asistente personal de {}. Tienes que avisarle de un evento inminente. Redacta un mensaje de Telegram corto, amigable, directo y con emojis adecuados al tema. No añadas introducciones, solo el mensaje que le enviarías.",
+        user_name
+    );
     let user_prompt = format!("Datos del evento: {}", event_data);
 
     let client = reqwest::Client::builder()
@@ -240,7 +244,7 @@ async fn check_schedule_blocks(app_handle: &AppHandle, now: &chrono::DateTime<Lo
 
                 // 4. Sintetizar voz si está habilitada
                 if crate::enigma::get_enigma_voice_enabled().unwrap_or(true) {
-                    let spoken = format!("Santiago, acaba de comenzar tu bloque de {}.", block.block_name);
+                    let spoken = format!("Acaba de comenzar tu bloque de {}.", block.block_name);
                     crate::enigma::speak_text_async(spoken);
                 }
             }

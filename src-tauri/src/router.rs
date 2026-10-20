@@ -680,13 +680,13 @@ fn get_system_tools_schema() -> Value {
             "type": "function",
             "function": {
                 "name": "execute_terminal_command",
-                "description": "Ejecuta comandos seguros de bash en el sistema operativo Linux y devuelve el stdout o stderr para automatizar tareas en el ordenador de Santiago. Cuenta con salvaguardas automáticas contra comandos destructivos.",
+                "description": "Ejecuta comandos seguros de shell/terminal en el sistema operativo del usuario y devuelve el stdout o stderr para automatizar tareas. Cuenta con salvaguardas automáticas contra comandos destructivos.",
                 "parameters": {
                     "type": "object",
                     "properties": {
                         "command": {
                             "type": "string",
-                            "description": "Comando bash a ejecutar (ej: 'git status', 'cargo check', 'ls -la', 'ps aux | grep node', 'uname -a')"
+                            "description": "Comando a ejecutar (ej: 'git status', 'cargo check', 'ls -la', 'ps aux | grep node', 'uname -a')"
                         }
                     },
                     "required": ["command"]
@@ -697,7 +697,7 @@ fn get_system_tools_schema() -> Value {
             "type": "function",
             "function": {
                 "name": "read_clipboard",
-                "description": "Lee el contenido actual copiado en el portapapeles del sistema operativo Linux (KDE Klipper / Wayland). ÚSALO OBLIGATORIAMENTE cuando el usuario diga 'lo que tengo copiado', 'mi portapapeles', 'explícame este código', 'corrige el bug de lo que copié', 'resume lo que acabo de copiar', 'traduce mi portapapeles', etc.",
+                "description": "Lee el contenido actual copiado en el portapapeles del sistema operativo. ÚSALO OBLIGATORIAMENTE cuando el usuario diga 'lo que tengo copiado', 'mi portapapeles', 'explícame este código', 'corrige el bug de lo que copié', 'resume lo que acabo de copiar', 'traduce mi portapapeles', etc.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -726,7 +726,7 @@ fn get_system_tools_schema() -> Value {
             "type": "function",
             "function": {
                 "name": "get_active_context",
-                "description": "Obtiene la ventana activa en foco de Santiago (título, aplicación, clase) y la lista de ventanas abiertas en su escritorio KDE Plasma 6 Wayland. Úsalo si el usuario pregunta '¿qué estoy haciendo?', '¿en qué ventana estoy?', 'ayúdame con esto', 'cuál es mi ventana activa', etc.",
+                "description": "Obtiene la ventana activa en foco del usuario (título, aplicación, clase) y la lista de ventanas abiertas en su escritorio. Úsalo si el usuario pregunta '¿qué estoy haciendo?', '¿en qué ventana estoy?', 'ayúdame con esto', 'cuál es mi ventana activa', etc.",
                 "parameters": {
                     "type": "object",
                     "properties": {},
@@ -738,7 +738,7 @@ fn get_system_tools_schema() -> Value {
             "type": "function",
             "function": {
                 "name": "focus_window",
-                "description": "Cambia de ventana, enfoca y trae al frente una aplicación específica abierta en el escritorio de Santiago (ej: 'Discord', 'Antigravity IDE', 'Spotify', 'Terminal', 'Opera').",
+                "description": "Cambia de ventana, enfoca y trae al frente una aplicación específica abierta en el escritorio del usuario (ej: 'Discord', 'Visual Studio Code', 'Spotify', 'Terminal', 'Navegador').",
                 "parameters": {
                     "type": "object",
                     "properties": {
@@ -1869,7 +1869,7 @@ Hoy es {weekday}, fecha: {date} (formato ISO YYYY-MM-DD), y son las {time} (form
 
 {telemetry}
 
-Eres el agente de ejecución de sistema de Enigma. Tienes acceso completo a herramientas locales para controlar el sistema Linux de Santiago.
+Eres el agente de ejecución de sistema de Enigma. Tienes acceso completo a herramientas locales para controlar el sistema operativo del usuario.
 
 REGLAS CRÍTICAS DE EJECUCIÓN (ANTI-ALUCINACIÓN):
 - NUNCA respondas con texto plano afirmando haber creado, programado o modificado una rutina, horario, cita o tarea si no has emitido la llamada a la herramienta correspondiente ('add_schedule', 'add_event', 'add_task').
@@ -1950,7 +1950,7 @@ REGLAS OBLIGATORIAS PARA EL USO DE HERRAMIENTAS:
     - Si el usuario te pide copiar un comando, código o texto al portapapeles, INVOCA la herramienta `copy_to_clipboard` pasándole el texto exacto.
 
 19. CONCIENCIA DEL CONTEXTO ACTIVO Y GESTIÓN DE VENTANAS:
-    - REGLA: Tienes conciencia en tiempo real de las ventanas abiertas en el escritorio KDE Plasma 6 y de la aplicación que Santiago tiene en foco.
+    - REGLA: Tienes conciencia en tiempo real de las ventanas abiertas en el escritorio y de la aplicación que el usuario tiene en foco.
     - Si el usuario pregunta "¿qué estoy haciendo?", "¿en qué ventana estoy?" o "ayúdame con esto", INVOCA la herramienta `get_active_context` para conocer la ventana en foco y actividad del sistema. Si además pide mirar o entender lo que ve, puedes combinar con `analyze_current_screen`.
     - Si el usuario te pide cambiar de ventana, enfocar o traer una app al frente (ej: "pásame a Discord", "enfoca el editor", "ponme Spotify", "trae la terminal"), INVOCA la herramienta `focus_window` pasándole el nombre de la app.
 
@@ -3857,7 +3857,7 @@ Profundiza en las causas fundamentales, matices conceptuales y conclusiones sól
 
 {context}
 
-Eres Enigma, el gemelo digital y asistente de Santiago.
+Eres Enigma, el gemelo digital y asistente autónomo del usuario.
 DIRECTIVA OBLIGATORIA DE IDIOMA (MANDATARIO ABSOLUTO):
 - DEBES RESPONDER SIEMPRE, SIN EXCEPCIÓN Y EN TODAS LAS CIRCUNSTANCIAS EN ESPAÑOL (de España).
 - ESTÁ TOTALMENTE PROHIBIDO RESPONDER EN INGLÉS O CUALQUIER OTRO IDIOMA.
@@ -4044,7 +4044,7 @@ mod tests {
 
     #[test]
     fn test_build_combined_system_prompt_none() {
-        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Santiago";
+        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Operador";
         let combined = build_combined_system_prompt(base_core, None);
         assert!(combined.contains(base_core));
         assert!(combined.contains("REGLA ESTRICTA DE IDIOMA"));
@@ -4052,8 +4052,8 @@ mod tests {
 
     #[test]
     fn test_strip_thinking_tags() {
-        let input = "<think>\nThinking about life...\n</think>Hola Santiago, ¿en qué te ayudo?";
-        assert_eq!(strip_thinking_tags(input), "Hola Santiago, ¿en qué te ayudo?");
+        let input = "<think>\nThinking about life...\n</think>Hola Operador, ¿en qué te ayudo?";
+        assert_eq!(strip_thinking_tags(input), "Hola Operador, ¿en qué te ayudo?");
 
         let nested = "<thought>Deep analysis</thought>Respuesta clara.";
         assert_eq!(strip_thinking_tags(nested), "Respuesta clara.");
@@ -4065,9 +4065,9 @@ mod tests {
     #[test]
     fn test_build_combined_system_prompt_grok() {
         crate::personas::init_default_personas();
-        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Santiago";
+        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Operador";
         let combined = build_combined_system_prompt(base_core, Some("grok"));
-        assert!(combined.contains("Usuario: Santiago"));
+        assert!(combined.contains("Usuario: Operador"));
         assert!(combined.contains("GROK PERSONA"));
         assert!(combined.contains("sarcasmo"));
     }
@@ -4075,9 +4075,9 @@ mod tests {
     #[test]
     fn test_build_combined_system_prompt_rust_senior() {
         crate::personas::init_default_personas();
-        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Santiago";
+        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Operador";
         let combined = build_combined_system_prompt(base_core, Some("rust_senior"));
-        assert!(combined.contains("Usuario: Santiago"));
+        assert!(combined.contains("Usuario: Operador"));
         assert!(combined.contains("RUST SENIOR ARCHITECT"));
         assert!(combined.contains("Zero-cost abstractions"));
     }
@@ -4085,9 +4085,9 @@ mod tests {
     #[test]
     fn test_build_combined_system_prompt_maestro_piano() {
         crate::personas::init_default_personas();
-        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Santiago";
+        let base_core = "# NÚCLEO DE CONCIENCIA ENIGMA\nUsuario: Operador";
         let combined = build_combined_system_prompt(base_core, Some("maestro_piano"));
-        assert!(combined.contains("Usuario: Santiago"));
+        assert!(combined.contains("Usuario: Operador"));
         assert!(combined.contains("MAESTRO DE PIANO CLÁSICO"));
         assert!(combined.contains("Chopin"));
     }

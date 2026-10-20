@@ -59,6 +59,10 @@ pub fn get_core_memory_path() -> PathBuf {
     if local_tauri.exists() {
         return local_tauri;
     }
+    let parent = PathBuf::from("../enigma_core.md");
+    if parent.exists() {
+        return parent;
+    }
 
     if let Some(cfg) = get_user_config_dir() {
         let file_path = cfg.join("enigma").join("enigma_core.md");
@@ -176,6 +180,54 @@ pub fn save_chat_message(role: String, content: String) -> Result<(), String> {
     save_message(&role, &content)
 }
 
+pub fn get_current_user_name() -> String {
+    if let Ok(conn) = crate::db::get_connection() {
+        let _ = conn.execute(
+            "CREATE TABLE IF NOT EXISTS enigma_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+            [],
+        );
+        if let Ok(name) = conn.query_row(
+            "SELECT value FROM enigma_settings WHERE key = 'user_name'",
+            [],
+            |r| r.get::<_, String>(0),
+        ) {
+            let trimmed = name.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+    std::env::var("USER")
+        .or_else(|_| std::env::var("USERNAME"))
+        .unwrap_or_else(|_| "Operador".to_string())
+}
+
+pub fn save_user_name(name: &str) -> Result<(), String> {
+    let conn = crate::db::get_connection().map_err(|e| e.to_string())?;
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS enigma_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+        [],
+    ).map_err(|e| e.to_string())?;
+    conn.execute(
+        "INSERT INTO enigma_settings (key, value) VALUES ('user_name', ?1)
+         ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        rusqlite::params![name.trim()],
+    ).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_user_profile() -> Result<serde_json::Value, String> {
+    Ok(serde_json::json!({
+        "user_name": get_current_user_name()
+    }))
+}
+
+#[tauri::command]
+pub fn save_user_profile(user_name: String) -> Result<(), String> {
+    save_user_name(&user_name)
+}
+
 /// Recupera los últimos N mensajes y los formatea como un bloque de contexto cronológico
 #[tauri::command]
 pub fn get_recent_context(limit: u32) -> String {
@@ -215,9 +267,9 @@ pub fn get_recent_context(limit: u32) -> String {
             .filter_map(|r| r.ok())
             .map(|(role, content)| {
                 let speaker = if role.eq_ignore_ascii_case("user") {
-                    "Santiago"
+                    get_current_user_name()
                 } else {
-                    "Enigma"
+                    "Enigma".to_string()
                 };
                 format!("{}: {}", speaker, content.trim())
             })
@@ -245,13 +297,13 @@ pub fn build_final_prompt(user_input: &str) -> String {
     let recent_context = get_recent_context(10);
     if recent_context.is_empty() {
         format!(
-            "{}\n\nMENSAJE DE SANTIAGO:\n{}",
+            "{}\n\nMENSAJE DEL USUARIO:\n{}",
             core_consciousness,
             user_input.trim()
         )
     } else {
         format!(
-            "{}\n\n{}\nMENSAJE DE SANTIAGO:\n{}",
+            "{}\n\n{}\nMENSAJE DEL USUARIO:\n{}",
             core_consciousness,
             recent_context,
             user_input.trim()
@@ -315,7 +367,7 @@ mod tests {
     fn test_core_memory_load_and_default() {
         let memory = load_core_memory();
         assert!(memory.contains("ENIGMA CORE CONSCIOUSNESS"));
-        assert!(memory.contains("Santiago"));
+        assert!(memory.contains("Usuario") || memory.contains("EnigmaOS"));
     }
 
     #[test]
