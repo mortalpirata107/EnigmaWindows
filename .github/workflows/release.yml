@@ -52,9 +52,10 @@ jobs:
             - **Paquete MSI (`.msi`):** Instalador para entornos corporativos y estándar de Windows.
             
             ✨ **Novedades de esta versión:**
-            - **Detección 100% Real de Apps Abiertas en Windows:** Filtro exhaustivo de ventanas de nivel superior (IsWindowVisible, descarte de procesos en segundo plano, ventanas cloaked/suspendidas de UWP con DWMWA_CLOAKED, child windows y tool windows sin WS_EX_APPWINDOW). Las aplicaciones en el Dock solo se muestran como abiertas si tienen ventanas reales activas.
-            - **Unificación de Tecla Windows y Selector de Apps:** Eliminado el botón duplicado redundante en el Dock. El extremo izquierdo ahora cuenta con un único botón para el selector de apps / Enigma Launcher. Integración de gancho de teclado nativo de bajo nivel (`WH_KEYBOARD_LL`) para capturar la pulsación de la tecla Windows (`VK_LWIN`/`VK_RWIN`) y conmutar el lanzador sustituyendo el menú clásico de Windows.
-            - **Integración Nativa Win32 AppBar (Estilo Seelen UI) y Reserva de WorkArea:** Implementado registro formal de AppBar en el Shell de Windows (`SHAppBarMessage` con `ABM_NEW` y `ABM_SETPOS` en `ABE_TOP`) combinado con `SystemParametersInfoW(SPI_SETWORKAREA)` calibrado a 52px (con escalado DPI dinámico) y centinela protector en memoria. Las ventanas maximizadas jamás se solapan ni quedan ocultas detrás del TopBar.
+            - **Detección Precisa y Filtrado Riguroso de Apps Abiertas:** Mapeo de identidad autoritario por ejecutable y clase (`CabinetWClass` para Explorador de Archivos, `ApplicationFrameWindow` para apps UWP como Calculadora/Configuración/Fotos). Eliminada la colisión de títulos de pestañas o documentos contra nombres de apps del sistema.
+            - **Protección Anti-Colisiones en el Dock:** El emparejamiento de ventanas en el Dock prioriza la identidad del proceso y clase; nunca confunde una pestaña de navegador ("GitHub Settings") con la app nativa de Configuración.
+            - **Win32 AppBar de Alto Rendimiento sin Condiciones de Carrera:** Inicialización atómica segura con guardas de concurrencia, soporte nativo multimonitor con `GetMonitorInfoW` (`rcMonitor`), cálculo preciso de WorkArea ante DPI variable y respuesta inmediata a eventos `ABN_POSCHANGED`.
+            - **Unificación de Tecla Windows y Gancho de Bajo Nivel:** Selector de apps unificado con gancho `WH_KEYBOARD_LL` insensible a auto-repetición de teclas y sincronización idéntica en Linux evdev.
           releaseDraft: false
           prerelease: false
           args: ''

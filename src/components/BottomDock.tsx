@@ -82,11 +82,23 @@ function matchKeysFor(app: PinnedApp): string[] {
 }
 
 function windowMatches(win: OpenWindow | RunningApp, keys: string[]): boolean {
-  const iconStr = (win.icon && !win.icon.startsWith('data:')) ? win.icon : '';
-  const hay = [win.window_class, win.app_name, iconStr, (win as OpenWindow).title]
-    .map(s => (s || '').toLowerCase())
-    .filter(Boolean);
-  return keys.some(k => hay.some(h => h.includes(k)));
+  const iconStr = (win.icon && !win.icon.startsWith('data:')) ? win.icon.toLowerCase() : '';
+  const appName = (win.app_name || '').toLowerCase();
+  const winClass = (win.window_class || '').toLowerCase();
+
+  // Match prioritario: coincidencia sobre la identidad real del proceso/clase/icono (no títulos de pestañas o documentos)
+  const identityHay = [winClass, appName, iconStr].filter(Boolean);
+  if (keys.some(k => identityHay.some(h => h.includes(k) || k.includes(h)))) {
+    return true;
+  }
+
+  // Si app_name y window_class están vacías, evaluar el título únicamente si comienza por la clave
+  if (!appName && !winClass && (win as OpenWindow).title) {
+    const titleLower = (win as OpenWindow).title.toLowerCase();
+    return keys.some(k => titleLower.startsWith(k));
+  }
+
+  return false;
 }
 
 function processNameFor(app: Pick<AppItem, 'exec' | 'id' | 'processName'>): string {

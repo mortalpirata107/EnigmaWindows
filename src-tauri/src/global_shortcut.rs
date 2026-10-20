@@ -34,6 +34,8 @@ mod linux_shortcuts {
                     let handle = std::thread::spawn(move || {
                         let mut alt_pressed = false;
                         let mut ctrl_pressed = false;
+                        let mut meta_pressed = false;
+                        let mut meta_combined = false;
                         let mut last_search_time = std::time::Instant::now() - Duration::from_secs(1);
 
                         loop {
@@ -50,10 +52,19 @@ mod linux_shortcuts {
                                                  ctrl_pressed = value > 0;
                                             } else if code == Key::KEY_LEFTMETA.code() || code == Key::KEY_RIGHTMETA.code() {
                                                 if value == 1 {
-                                                    eprintln!("[GlobalShortcut] evdev detected Super/Windows key! Emitting toggle-launcher");
-                                                    let _ = app.emit_to("dock", "toggle-launcher", ());
-                                                    let _ = app.emit("toggle-launcher", ());
+                                                    meta_pressed = true;
+                                                    meta_combined = false;
+                                                } else if value == 0 {
+                                                    if meta_pressed && !meta_combined {
+                                                        eprintln!("[GlobalShortcut] evdev detected Super/Windows key pressed alone! Emitting toggle-launcher");
+                                                        let _ = app.emit_to("dock", "toggle-launcher", ());
+                                                        let _ = app.emit("toggle-launcher", ());
+                                                    }
+                                                    meta_pressed = false;
+                                                    meta_combined = false;
                                                 }
+                                            } else if meta_pressed && value > 0 {
+                                                meta_combined = true;
                                             } else if code == Key::KEY_SPACE.code() {
                                                 if alt_pressed && value == 1 {
                                                     if last_search_time.elapsed() >= Duration::from_millis(250) {
@@ -91,7 +102,7 @@ mod linux_shortcuts {
                     let _ = h.join();
                 }
 
-                std::thread::sleep(Duration::from_millis(1000));
+                std::thread::sleep(Duration::from_millis(2000));
             }
         });
     }
@@ -152,8 +163,10 @@ mod windows_shortcuts {
 
             if vk == VK_LWIN || vk == VK_RWIN {
                 if is_down {
-                    WIN_KEY_DOWN.store(true, Ordering::SeqCst);
-                    WIN_KEY_COMBINED.store(false, Ordering::SeqCst);
+                    // Solo resetear combined si es una pulsación nueva (no auto-repetición mantenida)
+                    if !WIN_KEY_DOWN.swap(true, Ordering::SeqCst) {
+                        WIN_KEY_COMBINED.store(false, Ordering::SeqCst);
+                    }
                 } else if is_up {
                     let was_down = WIN_KEY_DOWN.swap(false, Ordering::SeqCst);
                     let combined = WIN_KEY_COMBINED.swap(false, Ordering::SeqCst);

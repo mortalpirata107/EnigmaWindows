@@ -948,18 +948,21 @@ pub fn get_app_icon(query: String) -> Option<String> {
     }
 }
 
-#[cfg(target_os = "windows")]
-fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, String, String) {
+#[allow(dead_code)]
+pub fn map_windows_process_info(
+    proc_stem: &str,
+    title_clean: &str,
+    class_name: &str,
+) -> (String, String, String) {
     let lower_stem = proc_stem.to_lowercase();
     let lower_title = title_clean.to_lowercase();
+    let lower_class = class_name.to_lowercase();
 
-    if lower_stem.contains("opera") || lower_title.contains("opera") {
-        return ("Opera".to_string(), "opera".to_string(), "opera".to_string());
-    }
-    if lower_stem.contains("chrome") || lower_title.contains("google chrome") {
+    // 1. Identificación Autoritaria por Proceso Ejecutable (Evita falsos positivos por títulos de pestañas o documentos)
+    if lower_stem == "chrome" {
         return ("Google Chrome".to_string(), "chrome".to_string(), "chrome".to_string());
     }
-    if lower_stem.contains("msedge") || lower_title.contains("edge") {
+    if lower_stem == "msedge" {
         return ("Microsoft Edge".to_string(), "edge".to_string(), "edge".to_string());
     }
     if lower_stem.contains("firefox") {
@@ -968,22 +971,28 @@ fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, Stri
     if lower_stem.contains("brave") {
         return ("Brave".to_string(), "brave".to_string(), "brave".to_string());
     }
-    if lower_stem == "code" || lower_title.contains("visual studio code") {
+    if lower_stem.contains("opera") {
+        return ("Opera".to_string(), "opera".to_string(), "opera".to_string());
+    }
+    if lower_stem == "code" {
         return ("VS Code".to_string(), "code".to_string(), "code".to_string());
     }
     if lower_stem == "explorer" {
-        return ("Explorador de archivos".to_string(), "explorer".to_string(), "files".to_string());
+        return ("Explorador de archivos".to_string(), "cabinetwclass".to_string(), "files".to_string());
     }
-    if lower_stem == "windowsterminal" || lower_stem == "powershell" {
+    if lower_stem == "windowsterminal" {
+        return ("Windows Terminal".to_string(), "windowsterminal".to_string(), "powershell".to_string());
+    }
+    if lower_stem == "powershell" || lower_stem == "pwsh" {
         return ("PowerShell".to_string(), "powershell".to_string(), "powershell".to_string());
     }
     if lower_stem == "cmd" {
         return ("Símbolo del sistema".to_string(), "cmd".to_string(), "cmd".to_string());
     }
-    if lower_stem.contains("spotify") || lower_title.contains("spotify") {
+    if lower_stem.contains("spotify") {
         return ("Spotify".to_string(), "spotify".to_string(), "spotify".to_string());
     }
-    if lower_stem.contains("discord") || lower_title.contains("discord") {
+    if lower_stem.contains("discord") {
         return ("Discord".to_string(), "discord".to_string(), "discord".to_string());
     }
     if lower_stem.contains("telegram") {
@@ -995,19 +1004,64 @@ fn map_windows_process_info(proc_stem: &str, title_clean: &str) -> (String, Stri
     if lower_stem.contains("taskmgr") {
         return ("Administrador de tareas".to_string(), "taskmgr".to_string(), "taskmgr".to_string());
     }
-    if lower_stem.contains("systemsettings") || lower_title.contains("configuración") || lower_title.contains("settings") {
-        return ("Configuración".to_string(), "settings".to_string(), "settings".to_string());
-    }
     if lower_stem.contains("notepad") {
         return ("Bloc de notas".to_string(), "notepad".to_string(), "notepad".to_string());
     }
+    if lower_stem.contains("systemsettings") {
+        return ("Configuración".to_string(), "settings".to_string(), "settings".to_string());
+    }
 
+    // 2. Aplicaciones Modernas de Windows (UWP / WinUI alojadas en ApplicationFrameHost)
+    if lower_stem == "applicationframehost" || lower_class == "applicationframewindow" {
+        if lower_title.contains("configuración") || lower_title.contains("settings") {
+            return ("Configuración".to_string(), "settings".to_string(), "settings".to_string());
+        }
+        if lower_title.contains("calculadora") || lower_title.contains("calculator") {
+            return ("Calculadora".to_string(), "calculator".to_string(), "calculator".to_string());
+        }
+        if lower_title.contains("fotos") || lower_title.contains("photos") {
+            return ("Fotos".to_string(), "photos".to_string(), "photos".to_string());
+        }
+        if lower_title.contains("microsoft store") || lower_title.contains("tienda") {
+            return ("Microsoft Store".to_string(), "store".to_string(), "store".to_string());
+        }
+        if !title_clean.is_empty() && !title_clean.eq_ignore_ascii_case("applicationframehost") {
+            let sanitized = lower_title.replace(' ', "");
+            return (title_clean.to_string(), sanitized.clone(), sanitized);
+        }
+    }
+
+    // 3. Identificación por Clase de Ventana Win32 (útil si OpenProcess falló por elevación/permisos de administrador)
+    if lower_class == "cabinetwclass" || lower_class == "explorewclass" {
+        return ("Explorador de archivos".to_string(), "cabinetwclass".to_string(), "files".to_string());
+    }
+    if lower_class == "taskmanagerwindow" {
+        return ("Administrador de tareas".to_string(), "taskmgr".to_string(), "taskmgr".to_string());
+    }
+    if lower_class == "cascadia_hosting_window_class" {
+        return ("Windows Terminal".to_string(), "windowsterminal".to_string(), "powershell".to_string());
+    }
+    if lower_class == "consolewindowclass" {
+        return ("Símbolo del sistema".to_string(), "cmd".to_string(), "cmd".to_string());
+    }
+    if lower_class == "notepad" {
+        return ("Bloc de notas".to_string(), "notepad".to_string(), "notepad".to_string());
+    }
+
+    // 4. Fallback General
     let display_name = if !proc_stem.is_empty() {
         proc_stem.to_string()
-    } else {
+    } else if !title_clean.is_empty() {
         title_clean.to_string()
+    } else {
+        class_name.to_string()
     };
-    (display_name, lower_stem.clone(), lower_stem)
+    let effective_class = if !lower_class.is_empty() {
+        lower_class
+    } else {
+        lower_stem.clone()
+    };
+    (display_name, effective_class, lower_stem)
 }
 
 #[cfg(target_os = "windows")]
@@ -1025,7 +1079,6 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
     };
 
     let mut windows: Vec<OpenWindowItem> = Vec::new();
-    let fg_hwnd = unsafe { GetForegroundWindow() };
 
     unsafe extern "system" fn enum_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
         let windows = &mut *(lparam as *mut Vec<OpenWindowItem>);
@@ -1097,6 +1150,9 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
             || class_lower == "shell_traywnd"
             || class_lower == "shell_secondarytraywnd"
             || class_lower == "enigmaos_appbar"
+            || class_lower == "notifyiconoverflowwindow"
+            || class_lower == "edgeuiinputtopwndclass"
+            || class_lower == "edgeuiinputwndclass"
         {
             return 1;
         }
@@ -1154,13 +1210,32 @@ pub fn get_open_windows() -> Vec<OpenWindowItem> {
             || lower_stem == "runtimebroker"
             || lower_stem == "taskhostw"
             || lower_stem == "lockapp"
+            || lower_stem == "backgroundtaskhost"
+            || lower_stem == "searchui"
+            || lower_stem == "gamebarft"
+            || lower_stem == "widgets"
+            || lower_stem == "widgetservice"
+            || lower_stem == "ctfmon"
+            || lower_stem == "smartscreen"
         {
+            return 1;
+        }
+
+        // En Windows, explorer.exe ejecuta la interfaz gráfica general (escritorio, bandeja, barra).
+        // Una aplicación "Explorador de Archivos" abierta por el usuario SOLO existe si su clase de ventana
+        // es CabinetWClass o ExploreWClass. Cualquier otra ventana de explorer.exe es interna del sistema.
+        if lower_stem == "explorer" && class_lower != "cabinetwclass" && class_lower != "explorewclass" {
+            return 1;
+        }
+
+        // Descartar ventanas de ApplicationFrameHost vacías o no asociadas a un app UWP real
+        if lower_stem == "applicationframehost" && (title_clean.is_empty() || title_clean.eq_ignore_ascii_case("applicationframehost")) {
             return 1;
         }
 
         let hwnd_val = hwnd as usize;
         let id = format!("{}", hwnd_val);
-        let (app_name, window_class, mut icon) = map_windows_process_info(&proc_stem, title_clean);
+        let (app_name, window_class, mut icon) = map_windows_process_info(&proc_stem, title_clean, &class_name);
         let fg = GetForegroundWindow();
         let is_active = (hwnd == fg);
 
@@ -1940,5 +2015,74 @@ mod tests {
         );
         let active = get_current_active_window();
         assert_eq!(active.class, "antigravity-ide");
+    }
+
+    #[test]
+    fn test_map_windows_process_info_no_title_collision() {
+        let (app, class, icon) = map_windows_process_info("chrome", "The Edge of Reason - Google Chrome", "Chrome_WidgetWin_1");
+        assert_eq!(app, "Google Chrome");
+        assert_eq!(class, "chrome");
+        assert_eq!(icon, "chrome");
+
+        let (app, class, icon) = map_windows_process_info("chrome", "GitHub Settings - Google Chrome", "Chrome_WidgetWin_1");
+        assert_eq!(app, "Google Chrome");
+        assert_eq!(class, "chrome");
+        assert_eq!(icon, "chrome");
+
+        let (app, class, icon) = map_windows_process_info("chrome", "Sydney Opera House - Google Chrome", "Chrome_WidgetWin_1");
+        assert_eq!(app, "Google Chrome");
+        assert_eq!(class, "chrome");
+        assert_eq!(icon, "chrome");
+
+        let (app, class, icon) = map_windows_process_info("chrome", "Spotify Web Player - Google Chrome", "Chrome_WidgetWin_1");
+        assert_eq!(app, "Google Chrome");
+        assert_eq!(class, "chrome");
+        assert_eq!(icon, "chrome");
+
+        let (app, class, icon) = map_windows_process_info("msedge", "Microsoft Edge", "Chrome_WidgetWin_1");
+        assert_eq!(app, "Microsoft Edge");
+        assert_eq!(class, "edge");
+        assert_eq!(icon, "edge");
+
+        let (app, class, icon) = map_windows_process_info("explorer", "Descargas", "CabinetWClass");
+        assert_eq!(app, "Explorador de archivos");
+        assert_eq!(class, "cabinetwclass");
+        assert_eq!(icon, "files");
+
+        let (app, class, icon) = map_windows_process_info("powershell", "PowerShell", "ConsoleWindowClass");
+        assert_eq!(app, "PowerShell");
+        assert_eq!(class, "powershell");
+        assert_eq!(icon, "powershell");
+    }
+
+    #[test]
+    fn test_map_windows_process_info_uwp_apps() {
+        let (app, class, icon) = map_windows_process_info("ApplicationFrameHost", "Calculadora", "ApplicationFrameWindow");
+        assert_eq!(app, "Calculadora");
+        assert_eq!(class, "calculator");
+        assert_eq!(icon, "calculator");
+
+        let (app, class, icon) = map_windows_process_info("ApplicationFrameHost", "Configuración", "ApplicationFrameWindow");
+        assert_eq!(app, "Configuración");
+        assert_eq!(class, "settings");
+        assert_eq!(icon, "settings");
+
+        let (app, class, icon) = map_windows_process_info("ApplicationFrameHost", "Fotos", "ApplicationFrameWindow");
+        assert_eq!(app, "Fotos");
+        assert_eq!(class, "photos");
+        assert_eq!(icon, "photos");
+    }
+
+    #[test]
+    fn test_map_windows_process_info_fallback_by_class() {
+        let (app, class, icon) = map_windows_process_info("", "Descargas", "CabinetWClass");
+        assert_eq!(app, "Explorador de archivos");
+        assert_eq!(class, "cabinetwclass");
+        assert_eq!(icon, "files");
+
+        let (app, class, icon) = map_windows_process_info("", "Administrador de tareas", "TaskManagerWindow");
+        assert_eq!(app, "Administrador de tareas");
+        assert_eq!(class, "taskmgr");
+        assert_eq!(icon, "taskmgr");
     }
 }

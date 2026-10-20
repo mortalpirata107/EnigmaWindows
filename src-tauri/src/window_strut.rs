@@ -299,16 +299,19 @@ pub fn configure_desktop_window(gtk_window: &gtk::ApplicationWindow) {
 
 #[cfg(target_os = "windows")]
 pub mod windows_appbar {
-    use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicI32, Ordering};
+    use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicI32, AtomicU8, Ordering};
     use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
+    use windows_sys::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+    };
     use windows_sys::Win32::UI::Shell::{
         SHAppBarMessage, ABE_TOP, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS, APPBARDATA,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
         GetSystemMetrics, PostQuitMessage, RegisterClassExW, SetWindowPos, ShowWindow,
-        SystemParametersInfoW, TranslateMessage, MSG, SM_CXSCREEN, SPIF_SENDCHANGE,
+        SystemParametersInfoW, TranslateMessage, MSG, SM_CXSCREEN, SM_CYSCREEN, SPIF_SENDCHANGE,
         SPIF_UPDATEINIFILE, SPI_GETWORKAREA, SPI_SETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER,
         SW_SHOWNA, WM_DESTROY, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
         WS_EX_TRANSPARENT, WS_POPUP,
@@ -322,6 +325,8 @@ pub mod windows_appbar {
     static APPBAR_HWND: AtomicIsize = AtomicIsize::new(0);
     static APPBAR_REGISTERED: AtomicBool = AtomicBool::new(false);
     static APPBAR_HEIGHT: AtomicI32 = AtomicI32::new(TOPBAR_BASE_HEIGHT);
+    // Ciclo de vida atómico: 0 = No iniciado, 1 = Inicializando (hilo activo), 2 = Registrado
+    static APPBAR_INIT_STATE: AtomicU8 = AtomicU8::new(0);
 
     unsafe extern "system" fn appbar_wndproc(
         hwnd: HWND,
@@ -334,6 +339,8 @@ pub mod windows_appbar {
                 // Notificación ABN_POSCHANGED (código 1): monitor, resolución o barra cambiada
                 if wparam as u32 == 1 {
                     reposition_appbar(hwnd);
+                    let height = APPBAR_HEIGHT.load(Ordering::SeqCst);
+                    enforce_workarea_top(height);
                 }
                 0
             }
@@ -349,7 +356,16 @@ pub mod windows_appbar {
         if hwnd == 0 {
             return;
         }
-        let screen_w = GetSystemMetrics(SM_CXSCREEN);
+
+        let mut mi: MONITORINFO = std::mem::zeroed();
+        mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY);
+        let (mon_left, mon_top, mon_right) = if hmon != 0 && GetMonitorInfoW(hmon, &mut mi) != 0 {
+            (mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right)
+        } else {
+            (0, 0, GetSystemMetrics(SM_CXSCREEN))
+        };
+
         let height = APPBAR_HEIGHT.load(Ordering::SeqCst);
 
         let mut abd: APPBARDATA = std::mem::zeroed();
@@ -357,16 +373,15 @@ pub mod windows_appbar {
         abd.hWnd = hwnd;
         abd.uEdge = ABE_TOP;
         abd.rc = RECT {
-            left: 0,
-            top: 0,
-            right: screen_w,
-            bottom: height,
+            left: mon_left,
+            top: mon_top,
+            right: mon_right,
+            bottom: mon_top + height,
         };
 
         // Protocolo nativo de Windows Shell AppBar (mismo mecanismo que Seelen UI y la barra de tareas)
         SHAppBarMessage(ABM_QUERYPOS, &mut abd);
-        abd.rc.top = 0;
-        abd.rc.bottom = height;
+        abd.rc.bottom = abd.rc.top + height;
         SHAppBarMessage(ABM_SETPOS, &mut abd);
 
         SetWindowPos(
@@ -382,16 +397,39 @@ pub mod windows_appbar {
 
     pub fn enforce_workarea_top(target_top: i32) {
         unsafe {
-            let mut rc: RECT = std::mem::zeroed();
-            if SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut rc as *mut _ as *mut _, 0) != 0 {
-                if rc.top < target_top {
-                    rc.top = target_top;
+            let hwnd = APPBAR_HWND.load(Ordering::SeqCst) as HWND;
+            let mut mi: MONITORINFO = std::mem::zeroed();
+            mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+            let hmon = if hwnd != 0 {
+                MonitorFromWindow(hwnd, MONITOR_DEFAULTTOPRIMARY)
+            } else {
+                MonitorFromWindow(0, MONITOR_DEFAULTTOPRIMARY)
+            };
+
+            if hmon != 0 && GetMonitorInfoW(hmon, &mut mi) != 0 {
+                let required_top = mi.rcMonitor.top + target_top;
+                if mi.rcWork.top < required_top {
+                    let mut new_work = mi.rcWork;
+                    new_work.top = required_top;
                     SystemParametersInfoW(
                         SPI_SETWORKAREA,
                         0,
-                        &mut rc as *mut _ as *mut _,
+                        &mut new_work as *mut _ as *mut _,
                         SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
                     );
+                }
+            } else {
+                let mut rc: RECT = std::mem::zeroed();
+                if SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut rc as *mut _ as *mut _, 0) != 0 {
+                    if rc.top < target_top {
+                        rc.top = target_top;
+                        SystemParametersInfoW(
+                            SPI_SETWORKAREA,
+                            0,
+                            &mut rc as *mut _ as *mut _,
+                            SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
+                        );
+                    }
                 }
             }
         }
@@ -401,7 +439,8 @@ pub mod windows_appbar {
         let height = bar_height.max(TOPBAR_BASE_HEIGHT);
         APPBAR_HEIGHT.store(height, Ordering::SeqCst);
 
-        if APPBAR_REGISTERED.load(Ordering::SeqCst) {
+        // Si ya está registrado, re-aplicar directamente la geometría calibrada
+        if APPBAR_INIT_STATE.load(Ordering::SeqCst) == 2 && APPBAR_REGISTERED.load(Ordering::SeqCst) {
             let hwnd = APPBAR_HWND.load(Ordering::SeqCst) as HWND;
             if hwnd != 0 {
                 unsafe {
@@ -409,6 +448,12 @@ pub mod windows_appbar {
                     enforce_workarea_top(height);
                 }
             }
+            return;
+        }
+
+        // Transición atómica 0 -> 1 para garantizar que SOLO UN hilo registre la AppBar y el centinela
+        if APPBAR_INIT_STATE.compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst).is_err() {
+            // Ya hay un hilo en proceso de inicialización; la altura ya fue actualizada arriba
             return;
         }
 
@@ -433,6 +478,7 @@ pub mod windows_appbar {
                 RegisterClassExW(&wnd_class);
 
                 let screen_w = GetSystemMetrics(SM_CXSCREEN);
+                let current_h = APPBAR_HEIGHT.load(Ordering::SeqCst);
                 let hwnd = CreateWindowExW(
                     WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
                     class_name.as_ptr(),
@@ -441,7 +487,7 @@ pub mod windows_appbar {
                     0,
                     0,
                     screen_w,
-                    height,
+                    current_h,
                     0,
                     0,
                     hinst,
@@ -450,7 +496,8 @@ pub mod windows_appbar {
 
                 if hwnd == 0 {
                     eprintln!("[AppBar] No se pudo crear la ventana proxy de AppBar; aplicando SPI_SETWORKAREA directo");
-                    enforce_workarea_top(height);
+                    enforce_workarea_top(current_h);
+                    APPBAR_INIT_STATE.store(0, Ordering::SeqCst);
                     return;
                 }
 
@@ -462,12 +509,14 @@ pub mod windows_appbar {
                 abd.uCallbackMessage = WM_APPBAR_NOTIFY;
                 SHAppBarMessage(ABM_NEW, &mut abd);
                 APPBAR_REGISTERED.store(true, Ordering::SeqCst);
+                APPBAR_INIT_STATE.store(2, Ordering::SeqCst);
 
                 reposition_appbar(hwnd);
                 ShowWindow(hwnd, SW_SHOWNA);
-                enforce_workarea_top(height);
+                let final_h = APPBAR_HEIGHT.load(Ordering::SeqCst);
+                enforce_workarea_top(final_h);
 
-                eprintln!("[AppBar] EnigmaOS Windows AppBar registrada con éxito (reserva superior: {}px)", height);
+                eprintln!("[AppBar] EnigmaOS Windows AppBar registrada con éxito (reserva superior: {}px)", final_h);
 
                 let mut msg: MSG = std::mem::zeroed();
                 while GetMessageW(&mut msg, 0, 0, 0) > 0 {
@@ -477,7 +526,7 @@ pub mod windows_appbar {
             }
         });
 
-        // Centinela en segundo plano: mantiene permanentemente protegido el WorkArea ante reseteos de Explorer
+        // Centinela único en segundo plano: mantiene permanentemente protegido el WorkArea ante reseteos de Explorer
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -493,6 +542,7 @@ pub mod windows_appbar {
     pub fn unregister_appbar() {
         let hwnd = APPBAR_HWND.swap(0, Ordering::SeqCst) as HWND;
         if hwnd != 0 && APPBAR_REGISTERED.swap(false, Ordering::SeqCst) {
+            APPBAR_INIT_STATE.store(0, Ordering::SeqCst);
             unsafe {
                 let mut abd: APPBARDATA = std::mem::zeroed();
                 abd.cbSize = std::mem::size_of::<APPBARDATA>() as u32;
@@ -500,18 +550,18 @@ pub mod windows_appbar {
                 SHAppBarMessage(ABM_REMOVE, &mut abd);
                 DestroyWindow(hwnd);
 
-                let mut rc: RECT = std::mem::zeroed();
-                if SystemParametersInfoW(SPI_GETWORKAREA, 0, &mut rc as *mut _ as *mut _, 0) != 0 {
-                    let height = APPBAR_HEIGHT.load(Ordering::SeqCst);
-                    if rc.top == height {
-                        rc.top = 0;
-                        SystemParametersInfoW(
-                            SPI_SETWORKAREA,
-                            0,
-                            &mut rc as *mut _ as *mut _,
-                            SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
-                        );
-                    }
+                let mut mi: MONITORINFO = std::mem::zeroed();
+                mi.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+                let hmon = MonitorFromWindow(0, MONITOR_DEFAULTTOPRIMARY);
+                if hmon != 0 && GetMonitorInfoW(hmon, &mut mi) != 0 {
+                    let mut restore_work = mi.rcWork;
+                    restore_work.top = mi.rcMonitor.top;
+                    SystemParametersInfoW(
+                        SPI_SETWORKAREA,
+                        0,
+                        &mut restore_work as *mut _ as *mut _,
+                        SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
+                    );
                 }
                 eprintln!("[AppBar] EnigmaOS Windows AppBar desregistrada y WorkArea restaurado");
             }
