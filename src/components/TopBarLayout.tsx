@@ -74,7 +74,7 @@ export const TopBarLayout: React.FC = () => {
   return (
     <div
       id="topbar-canvas"
-      className="fixed top-0 left-0 w-full h-[900px] m-0 p-0 bg-transparent select-none pointer-events-none z-50 overflow-visible"
+      className="fixed top-0 left-0 w-full h-full min-h-screen m-0 p-0 bg-transparent select-none pointer-events-none z-50 overflow-visible"
       style={{ top: 0, left: 0, margin: 0, padding: 0, willChange: 'transform' }}
     >
       {/* Heartbeat invisible de 1px para el compositor de WebKitGTK */}

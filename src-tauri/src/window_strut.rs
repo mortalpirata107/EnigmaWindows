@@ -37,9 +37,6 @@ fn is_cursor_in_regions(
     if label == "dock" && cursor[1] < win_pos.y {
         return false;
     }
-    if label == "main" && rel_y > 520 {
-        return false;
-    }
 
     const MARGIN: i32 = 8;
     for r in regions {
@@ -601,14 +598,15 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
             let mon_y = mon_pos.y as f64 / scale_factor;
 
             if window.label() == "dock" {
-                // Dock window: anchored to the BOTTOM of the screen
-                let dock_h: f64 = (580.0f64).min(logical_h - 40.0);
+                // Dock window: anchored to the BOTTOM of the screen with generous headroom for popovers/previews
+                let dock_h: f64 = (620.0f64).min(logical_h - 40.0).max(300.0);
                 let dock_y = logical_h - dock_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, dock_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y + dock_y));
             } else {
-                // Main window: anchored to the TOP of the screen
-                let main_h: f64 = (500.0f64).min(logical_h - 100.0);
+                // Main window: anchored to the TOP of the screen, dynamically sizing up to 960px
+                // to prevent clipping when VoiceOrb, EnigmaHub or NotchSearch expand vertically
+                let main_h: f64 = (logical_h - 68.0).min(960.0).max(520.0);
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, main_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y));
 

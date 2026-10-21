@@ -286,7 +286,7 @@ export const EnigmaLauncher: React.FC<EnigmaLauncherProps> = ({
           exit={{ opacity: 0, y: 10, scale: 0.96 }}
           transition={{ type: 'spring', stiffness: 380, damping: 26 }}
           onClick={(e) => e.stopPropagation()}
-          className="absolute bottom-full left-0 mb-4 z-[100] w-[720px] h-[500px] neu-chassis rounded-[28px] flex overflow-hidden select-none cursor-default"
+          className="absolute bottom-full left-0 mb-4 z-[100] w-[min(720px,calc(100vw-32px))] max-h-[min(500px,calc(100vh-90px))] h-[500px] neu-chassis rounded-[28px] flex overflow-hidden select-none cursor-default"
         >
           {/* =========================================================================
               PANEL IZQUIERDO / CENTRAL: Omnibox, Top 6 Apps, Recientes y Resultados (68%)

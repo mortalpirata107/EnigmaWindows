@@ -41,14 +41,32 @@ export function getTopBarRegions(): [number, number, number, number][] {
   const forcefieldEl = document.getElementById('enigma-forcefield-container');
 
   if (enigmaInput || enigmaOutput) {
-    // Enigma AI está activo: otorgar hitbox al contenedor padre completo de Enigma
+    // Enigma AI está activo: otorgar hitbox al contenedor padre completo y todos sus hijos activos
     const targetEl = forcefieldEl || notchEl;
     if (targetEl) {
       const r = targetEl.getBoundingClientRect();
-      const w = Math.max(360, r.width > 50 ? r.width : 360);
-      const h = Math.max(500, r.height > 50 ? r.height : 500);
-      const left = r.width > 50 ? r.left : (centerX - w / 2);
+      let minLeft = r.width > 50 ? r.left : (centerX - 320);
+      let maxRight = r.width > 50 ? r.right : (centerX + 320);
+      let maxBottom = r.bottom;
+
+      if (enigmaOutput) {
+        const outR = enigmaOutput.getBoundingClientRect();
+        if (outR.bottom > maxBottom) maxBottom = outR.bottom;
+        if (outR.left < minLeft && outR.left > 0) minLeft = outR.left;
+        if (outR.right > maxRight) maxRight = outR.right;
+      }
+      if (enigmaInput) {
+        const inR = enigmaInput.getBoundingClientRect();
+        if (inR.bottom > maxBottom) maxBottom = inR.bottom;
+        if (inR.left < minLeft && inR.left > 0) minLeft = inR.left;
+        if (inR.right > maxRight) maxRight = inR.right;
+      }
+
       const top = Math.max(0, r.top);
+      const w = Math.max(360, maxRight - minLeft + 16);
+      const h = Math.max(500, maxBottom - top + 16);
+      const left = Math.max(0, minLeft - 8);
+
       regions.push([
         Math.max(0, q(left * dpr)),
         q(top * dpr),

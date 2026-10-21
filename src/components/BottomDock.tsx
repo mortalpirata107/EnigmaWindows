@@ -396,7 +396,9 @@ export const BottomDock: React.FC = () => {
     const musicWidth = 190;
     const paddingAndGaps = 32 + 32;
 
-    return Math.max(720, startWidth + sepWidth + appsWidth + dividerWidth + musicWidth + paddingAndGaps);
+    const naturalWidth = startWidth + sepWidth + appsWidth + dividerWidth + musicWidth + paddingAndGaps;
+    const maxAvailable = typeof window !== 'undefined' ? Math.max(400, window.innerWidth - 32) : 1200;
+    return Math.min(maxAvailable, Math.max(680, naturalWidth));
   }, [pinnedApps.length, runningUnpinnedApps.length, visualSettings.dock_size]);
 
   // =========================================================================
