@@ -609,12 +609,12 @@ export const EnigmaLauncher: React.FC<EnigmaLauncherProps> = ({
           {/* =========================================================================
               SEPARADOR VERTICAL LUMINOSO NEUMÓRFICO EN ROJO
               ========================================================================= */}
-          <div className="w-[2px] self-stretch bg-gradient-to-b from-transparent via-[#EF4444]/60 to-transparent shadow-[0_0_8px_rgba(239,68,68,0.4)] my-3 shrink-0" />
+          <div className="hidden sm:block w-[2px] self-stretch bg-gradient-to-b from-transparent via-[#EF4444]/60 to-transparent shadow-[0_0_8px_rgba(239,68,68,0.4)] my-3 shrink-0" />
 
           {/* =========================================================================
               PANEL DERECHO: SIDEBAR DE TELEMETRÍA SYSINFO Y ACCIONES DE ENERGÍA (32%)
               ========================================================================= */}
-          <div className="w-[235px] p-3.5 flex flex-col justify-between shrink-0 bg-transparent">
+          <div className="hidden sm:flex w-[235px] p-3.5 flex-col justify-between shrink-0 bg-transparent">
             {/* 1. Widgets de Telemetría Real (sysinfo) */}
             <div className="space-y-2.5">
               <div className="text-[10px] font-mono font-bold tracking-wider text-white/80 uppercase flex items-center gap-1.5">

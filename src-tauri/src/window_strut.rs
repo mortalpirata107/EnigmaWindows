@@ -138,13 +138,13 @@ pub fn init_wayland_layer_shell(gtk_window: &gtk::ApplicationWindow) -> bool {
                 gtk_layer_set_margin(win_ptr, 0, 0); // LEFT
                 gtk_layer_set_margin(win_ptr, 1, 0); // RIGHT
 
-                gtk_window.set_default_size(2560, 900);
-                gtk_window.resize(2560, 900);
-                gtk::prelude::WidgetExt::set_size_request(gtk_window, 2560, 900);
+                gtk_window.set_default_size(2560, 960);
+                gtk_window.resize(2560, 960);
+                gtk::prelude::WidgetExt::set_size_request(gtk_window, 2560, 960);
 
                 gtk_layer_set_exclusive_zone(win_ptr, 36);
                 gtk_layer_set_keyboard_mode(win_ptr, 0);
-                eprintln!("[EnigmaOS] Native Wayland Layer Shell initialized (layer=TOP, exclusive_zone=36, size=2560x900, top_margin=0)");
+                eprintln!("[EnigmaOS] Native Wayland Layer Shell initialized (layer=TOP, exclusive_zone=36, size=2560x960, top_margin=0)");
                 return true;
             } else {
                 eprintln!("[EnigmaOS] gtk_layer_is_layer_window returned 0");
@@ -599,14 +599,14 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
 
             if window.label() == "dock" {
                 // Dock window: anchored to the BOTTOM of the screen with generous headroom for popovers/previews
-                let dock_h: f64 = (620.0f64).min(logical_h - 40.0).max(300.0);
+                let dock_h: f64 = (640.0f64).min(logical_h - 40.0).max(300.0);
                 let dock_y = logical_h - dock_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, dock_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y + dock_y));
             } else {
-                // Main window: anchored to the TOP of the screen, dynamically sizing up to 960px
-                // to prevent clipping when VoiceOrb, EnigmaHub or NotchSearch expand vertically
-                let main_h: f64 = (logical_h - 68.0).min(960.0).max(520.0);
+                // Main window: dynamically sizes to monitor width and full logical height with transparent background
+                // and native hardware click-through, completely eliminating window clipping on any resolution
+                let main_h: f64 = logical_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, main_h));
                 let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y));
 

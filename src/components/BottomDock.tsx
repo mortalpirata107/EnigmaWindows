@@ -397,8 +397,8 @@ export const BottomDock: React.FC = () => {
     const paddingAndGaps = 32 + 32;
 
     const naturalWidth = startWidth + sepWidth + appsWidth + dividerWidth + musicWidth + paddingAndGaps;
-    const maxAvailable = typeof window !== 'undefined' ? Math.max(400, window.innerWidth - 32) : 1200;
-    return Math.min(maxAvailable, Math.max(680, naturalWidth));
+    const maxAvailable = typeof window !== 'undefined' ? Math.max(380, window.innerWidth - 32) : 1200;
+    return Math.min(maxAvailable, Math.max(480, naturalWidth));
   }, [pinnedApps.length, runningUnpinnedApps.length, visualSettings.dock_size]);
 
   // =========================================================================
@@ -1263,7 +1263,7 @@ export const BottomDock: React.FC = () => {
               {/* =================================================================
                   3. SECTORIZACIÓN DE APPS (Fijadas vs Abiertas)
                   ================================================================= */}
-              <div className="flex items-end overflow-visible" style={{ gap: DOCK_ICON_GAP }}>
+              <div className="flex items-end max-w-full overflow-x-auto scrollbar-none" style={{ gap: DOCK_ICON_GAP }}>
                 {/* 3.1 Apps Fijadas */}
                 {pinnedApps.map((app, index) => renderItem(app, index, true))}
 

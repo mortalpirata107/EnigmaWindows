@@ -1096,8 +1096,11 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
     if (activeNotification && enigmaState === 'hidden' && !searchOpen) return 60;
     if (enigmaState === 'corrupting') return 34;
     if (enigmaState === 'active') {
-      // 295px perfecto en 27 pulgadas / monitores estándar; 220px fluido en portátiles pequeños
-      return vh < 750 ? 220 : 295;
+      // 295px perfecto en 27 pulgadas / 1440p / 1080p estándar (vh >= 900)
+      // Escala fluida y proporcional en portátiles (768p - 1080p @ 125/150% scaling)
+      if (vh >= 900) return 295;
+      if (vh >= 800) return 250;
+      return 210;
     }
     if (!isExpanded) return 34;
     if (searchOpen) return Math.min(430, vh - 60);
@@ -1121,7 +1124,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
     if (activeNotification && enigmaState === 'hidden' && !searchOpen) return 460;
     if (enigmaState === 'corrupting') return 255;
     if (enigmaState === 'active') {
-      const activeSize = vh < 750 ? 220 : 295;
+      const activeSize = vh >= 900 ? 295 : (vh >= 800 ? 250 : 210);
       return Math.min(activeSize, maxAvailable);
     }
     if (searchOpen) return Math.min(560, maxAvailable);
@@ -1166,7 +1169,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
         ref={forcefieldRef}
         id="enigma-forcefield-container"
         onMouseLeave={handleForcefieldMouseLeave}
-        className={`absolute top-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto select-none m-0 z-40 ${enigmaState === 'active' ? 'gap-2.5 pb-6' : 'gap-0 pb-0'
+        className={`absolute top-3.5 left-1/2 -translate-x-1/2 flex flex-col items-center pointer-events-auto select-none m-0 z-40 max-h-[calc(100vh-80px)] ${enigmaState === 'active' ? 'gap-2.5 pb-2' : 'gap-0 pb-0'
           }`}
         style={{ top: 14, margin: 0 }}
       >
@@ -1282,7 +1285,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
                       bands={audioReactive.bands}
                       onset={audioReactive.onset}
                       speechEnv={audioReactive.speechEnv}
-                      size={typeof window !== 'undefined' && window.innerHeight < 750 ? 200 : 270}
+                      size={typeof window !== 'undefined' ? (window.innerHeight >= 900 ? 270 : (window.innerHeight >= 800 ? 225 : 190)) : 270}
                       className="z-10"
                     />
                   </motion.div>
@@ -1589,7 +1592,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-                    className="mb-2.5 w-[min(560px,calc(100vw-32px))] rounded-3xl bg-[#0B0B0E] border border-[rgba(239,68,68,0.18)] shadow-[0_20px_50px_rgba(0,0,0,0.95)] p-3 z-50 select-none"
+                    className="mb-2.5 w-[min(560px,calc(100vw-32px))] max-h-[220px] overflow-y-auto scrollbar-thin rounded-3xl bg-[#0B0B0E] border border-[rgba(239,68,68,0.18)] shadow-[0_20px_50px_rgba(0,0,0,0.95)] p-3 z-50 select-none"
                   >
                     <div className="flex items-center justify-between px-3 pb-2 border-b border-white/10 text-xs font-mono text-white/50">
                       <span className="flex items-center gap-1.5 text-[#b82a2a] font-semibold">
@@ -1645,7 +1648,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
                 className={`w-[min(640px,calc(100vw-32px))] max-w-[660px] bg-[#070709] border ${isListeningSTT
                     ? 'border-[#EF4444] shadow-[inset_3px_3px_6px_#020203,inset_-2px_-2px_5px_#14141B,0_0_20px_rgba(239,68,68,0.5)]'
                     : 'border-red-950/60 shadow-[inset_3px_3px_6px_#020203,inset_-2px_-2px_5px_#14141B,0_1px_0_rgba(255,255,255,0.03)]'
-                  } rounded-full px-5 py-2.5 flex items-center transition-all focus-within:border-[#EF4444]/80 focus-within:shadow-[inset_3px_3px_6px_#020203,inset_-2px_-2px_5px_#14141B,0_0_15px_rgba(239,68,68,0.25)] m-0 z-40`}
+                  } rounded-full px-4 sm:px-5 py-2 sm:py-2.5 flex items-center transition-all focus-within:border-[#EF4444]/80 focus-within:shadow-[inset_3px_3px_6px_#020203,inset_-2px_-2px_5px_#14141B,0_0_15px_rgba(239,68,68,0.25)] m-0 z-40 shrink-0`}
               >
                 {/* Selector Liquid Glass compacto de Persona Activa dentro de la cápsula */}
                 <div className="shrink-0 mr-2">
@@ -1684,8 +1687,8 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
                     }
                   }}
                   disabled={isStreaming}
-                  placeholder={isListeningSTT ? 'Escuchando tu voz...' : 'Pregunta o pide lo que quieras a Enigma...'}
-                  className="flex-1 min-w-0 text-white text-base font-light outline-none placeholder-white/35 bg-transparent select-text cursor-text"
+                  placeholder={isListeningSTT ? 'Escuchando tu voz...' : (typeof window !== 'undefined' && window.innerWidth < 640 ? 'Pregunta a Enigma...' : 'Pregunta o pide lo que quieras a Enigma...')}
+                  className="flex-1 min-w-0 text-white text-sm sm:text-base font-light outline-none placeholder-white/35 bg-transparent select-text cursor-text placeholder:truncate"
                   autoFocus
                 />
 
@@ -1865,7 +1868,7 @@ export const DynamicNotch: React.FC<DynamicNotchProps> = ({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
               transition={{ type: 'spring', stiffness: 300, damping: 25, delay: 0.15 }}
-              className="w-[min(640px,calc(100vw-32px))] max-w-[660px] max-h-[min(520px,calc(100vh-380px))] min-h-[160px] bg-[#0B0B0E] border border-red-950/60 rounded-3xl p-5 shadow-[0_25px_50px_rgba(0,0,0,0.98),0_0_25px_rgba(184,42,42,0.15)] flex flex-col z-30 select-text relative overflow-hidden"
+              className="w-[min(640px,calc(100vw-32px))] max-w-[660px] flex-1 min-h-[160px] max-h-[520px] bg-[#0B0B0E] border border-red-950/60 rounded-3xl p-4 sm:p-5 shadow-[0_25px_50px_rgba(0,0,0,0.98),0_0_25px_rgba(184,42,42,0.15)] flex flex-col z-30 select-text relative overflow-hidden"
             >
               <EnigmaHub
                 messages={messages}

@@ -13,7 +13,8 @@ export function getTopBarRegions(): [number, number, number, number][] {
   const centerX = screenW / 2;
 
   if (document.body.dataset.modalOpen === 'true') {
-    return [[0, 0, Math.round(screenW * dpr), Math.round(1150 * dpr)]];
+    const screenH = window.innerHeight;
+    return [[0, 0, Math.round(screenW * dpr), Math.round(screenH * dpr)]];
   }
 
   // 1. Left Capsule (floating island)
@@ -64,7 +65,7 @@ export function getTopBarRegions(): [number, number, number, number][] {
 
       const top = Math.max(0, r.top);
       const w = Math.max(360, maxRight - minLeft + 16);
-      const h = Math.max(500, maxBottom - top + 16);
+      const h = Math.max(300, maxBottom - top + 16);
       const left = Math.max(0, minLeft - 8);
 
       regions.push([

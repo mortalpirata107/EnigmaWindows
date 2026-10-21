@@ -1231,7 +1231,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
             transition={{ duration: 0.15 }}
-            className="grid grid-cols-2 gap-3.5 w-full max-h-[min(480px,calc(100vh-440px))] overflow-y-auto pr-1 scrollbar-thin"
+            className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 w-full flex-1 min-h-0 overflow-y-auto pr-1 scrollbar-thin"
           >
             {menuItems.map((item) => (
               <motion.div
@@ -1466,7 +1466,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
 
             <div
               ref={chatScrollRef}
-              className="flex-1 min-h-0 max-h-[min(420px,calc(100vh-450px))] overflow-y-auto w-full flex flex-col pr-1.5 pb-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
+              className="flex-1 min-h-0 max-h-[460px] overflow-y-auto w-full flex flex-col pr-1.5 pb-6 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent"
             >
               {/* Si Ollama está offline o sin modelos y hay mensajes previos, mostrar aviso compacto */}
               {messages.length > 0 &&
@@ -1544,7 +1544,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="w-full flex-1 min-h-0 flex flex-col max-h-[min(390px,calc(100vh-440px))] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
+            className="w-full flex-1 min-h-0 flex flex-col max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
           >
             {/* Pestañas Dinámicas de Subcategorías (Carpetas) */}
             <div className="shrink-0 pb-0.5">
@@ -1745,7 +1745,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="w-full flex-1 min-h-0 flex flex-col max-h-[min(380px,calc(100vh-440px))] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
+            className="w-full flex-1 min-h-0 flex flex-col max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
           >
             {/* Pestañas Dinámicas de Subcategorías (Carpetas) */}
             <div className="shrink-0 pb-0.5">
@@ -1856,7 +1856,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="w-full flex-1 min-h-0 flex flex-col max-h-[min(380px,calc(100vh-440px))] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
+            className="w-full flex-1 min-h-0 flex flex-col max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
           >
             {/* Pestañas Dinámicas de Subcategorías (Carpetas) */}
             <div className="shrink-0 pb-0.5">
@@ -1901,7 +1901,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="w-full flex-1 min-h-0 flex flex-col max-h-[min(380px,calc(100vh-440px))] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
+            className="w-full flex-1 min-h-0 flex flex-col max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-2.5"
           >
             {/* Perfil del Operador / Usuario */}
             <div className="p-3.5 rounded-2xl neu-extruded flex flex-col gap-2.5">
@@ -2083,7 +2083,7 @@ export const EnigmaHub: React.FC<EnigmaHubProps> = ({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
             transition={{ duration: 0.15 }}
-            className="w-full flex-1 min-h-0 flex flex-col max-h-[min(380px,calc(100vh-440px))] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-3"
+            className="w-full flex-1 min-h-0 flex flex-col max-h-[460px] overflow-y-auto scrollbar-thin scrollbar-thumb-white/10 pr-1 space-y-3"
           >
             {/* Tarjeta Destacada: Microservicio WhatsApp Baileys */}
             <div className="p-3.5 rounded-2xl neu-extruded flex flex-col gap-3">

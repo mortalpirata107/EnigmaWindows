@@ -160,7 +160,7 @@ export const MediaExpanded: React.FC<MediaExpandedProps> = ({
   return (
     <div 
       onWheel={handleWheel}
-      className="w-[520px] h-full p-4 text-white select-none flex flex-col justify-between overflow-hidden pointer-events-auto bg-[#0B0B0E]"
+      className="w-full max-w-[520px] h-full p-4 text-white select-none flex flex-col justify-between overflow-hidden pointer-events-auto bg-[#0B0B0E]"
     >
       {/* 1. Cabecera y Paginador Superior Centrado */}
       <div className="flex items-center justify-between shrink-0 relative">
