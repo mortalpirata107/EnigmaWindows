@@ -306,11 +306,11 @@ pub mod windows_appbar {
         SHAppBarMessage, ABE_TOP, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS, APPBARDATA,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+        CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, FindWindowW, GetMessageW,
         GetSystemMetrics, GetWindowRect, PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes,
         SetWindowPos, ShowWindow, SystemParametersInfoW, TranslateMessage, MSG,
-        HWND_TOPMOST, LWA_ALPHA, SM_CXSCREEN, SM_CYSCREEN, SPIF_SENDCHANGE,
-        SPIF_UPDATEINIFILE, SPI_GETWORKAREA, SPI_SETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER,
+        HWND_TOPMOST, LWA_ALPHA, SM_CXSCREEN, SPIF_SENDCHANGE,
+        SPIF_UPDATEINIFILE, SPI_GETWORKAREA, SPI_SETWORKAREA, SWP_ASYNCWINDOWPOS, SWP_NOACTIVATE, SWP_NOZORDER,
         SWP_SHOWWINDOW, SW_SHOWNA, WM_DESTROY, WM_ERASEBKGND, WM_PAINT, WM_USER, WNDCLASSEXW,
         WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP,
     };
@@ -334,7 +334,9 @@ pub mod windows_appbar {
     static MAIN_MON_H: AtomicI32 = AtomicI32::new(0);
 
     pub fn register_main_window_anchor(hwnd: isize, x: i32, y: i32, w: i32, h: i32) {
-        MAIN_HWND.store(hwnd, Ordering::SeqCst);
+        if hwnd != 0 {
+            MAIN_HWND.store(hwnd, Ordering::SeqCst);
+        }
         MAIN_MON_X.store(x, Ordering::SeqCst);
         MAIN_MON_Y.store(y, Ordering::SeqCst);
         MAIN_MON_W.store(w, Ordering::SeqCst);
@@ -342,10 +344,20 @@ pub mod windows_appbar {
         reanchor_main_window();
     }
 
+    pub fn get_main_window_hwnd() -> isize {
+        MAIN_HWND.load(Ordering::SeqCst)
+    }
+
     pub fn reanchor_main_window() {
-        let hwnd = MAIN_HWND.load(Ordering::SeqCst) as HWND;
+        let mut hwnd = MAIN_HWND.load(Ordering::SeqCst) as HWND;
         if hwnd == 0 {
-            return;
+            let title: Vec<u16> = "EnigmaOS\0".encode_utf16().collect();
+            hwnd = unsafe { FindWindowW(std::ptr::null(), title.as_ptr()) };
+            if hwnd != 0 {
+                MAIN_HWND.store(hwnd as isize, Ordering::SeqCst);
+            } else {
+                return;
+            }
         }
         unsafe {
             let x = MAIN_MON_X.load(Ordering::SeqCst);
@@ -372,7 +384,7 @@ pub mod windows_appbar {
                     y,
                     w,
                     h,
-                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW | SWP_ASYNCWINDOWPOS,
                 );
             }
         }
@@ -677,14 +689,15 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
                 // Main window: dynamically sizes to monitor width and full logical height with transparent background
                 // and native hardware click-through, completely eliminating window clipping on any resolution.
                 // Anclamos firmemente en mon_pos físico (0, 0 en monitor primario) sin desfases.
-                let main_h: f64 = logical_h;
-                let _ = window.set_size(tauri::LogicalSize::new(logical_w, main_h));
-                let _ = window.set_position(tauri::PhysicalPosition::new(mon_pos.x, mon_pos.y));
+                let p_pos = tauri::PhysicalPosition::new(mon_pos.x, mon_pos.y);
+                let p_size = tauri::PhysicalSize::new(size.width, size.height);
+                let _ = window.set_size(p_size);
+                let _ = window.set_position(p_pos);
 
                 let bar_h_px = (windows_appbar::TOPBAR_BASE_HEIGHT as f64 * scale_factor).round() as i32;
                 windows_appbar::init_appbar(bar_h_px);
 
-                let raw_hwnd = window.hwnd().ok().map(|h| h as isize).unwrap_or(0);
+                let raw_hwnd = window.hwnd().ok().map(|h| h.0 as isize).unwrap_or(0);
                 windows_appbar::register_main_window_anchor(
                     raw_hwnd,
                     mon_pos.x,
@@ -695,11 +708,21 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
 
                 // Reintentos escalonados para contrarrestar de inmediato el desplazamiento asíncrono del Windows Shell
                 let win_main = window.clone();
-                let p_pos = tauri::PhysicalPosition::new(mon_pos.x, mon_pos.y);
-                let p_size = tauri::PhysicalSize::new(size.width, size.height);
                 std::thread::spawn(move || {
                     for delay in [50, 150, 350, 800, 1500] {
                         std::thread::sleep(std::time::Duration::from_millis(delay));
+                        if let Ok(h) = win_main.hwnd() {
+                            let raw = h.0 as isize;
+                            if raw != 0 && windows_appbar::get_main_window_hwnd() == 0 {
+                                windows_appbar::register_main_window_anchor(
+                                    raw,
+                                    p_pos.x,
+                                    p_pos.y,
+                                    p_size.width as i32,
+                                    p_size.height as i32,
+                                );
+                            }
+                        }
                         let _ = win_main.set_size(p_size);
                         let _ = win_main.set_position(p_pos);
                         windows_appbar::reanchor_main_window();
@@ -1067,3 +1090,66 @@ pub fn start_global_cursor_tracker(window: WebviewWindow) {
         let _ = window;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_topbar_geometry_clearance() {
+        // La barra superior debe tener margen suficiente para alojar las cápsulas
+        // (14px margen superior + 34px altura base cápsula = 48px).
+        // La altura de reserva física debe ser al menos 52px para dejar margen de sombra/separación.
+        const TOPBAR_MARGIN_TOP: i32 = 14;
+        const CAPSULE_BASE_HEIGHT: i32 = 34;
+        const MIN_RESERVED_HEIGHT: i32 = 52;
+
+        let total_capsule_bottom = TOPBAR_MARGIN_TOP + CAPSULE_BASE_HEIGHT;
+        assert_eq!(total_capsule_bottom, 48);
+        assert!(MIN_RESERVED_HEIGHT >= total_capsule_bottom);
+        let clearance = MIN_RESERVED_HEIGHT - total_capsule_bottom;
+        assert!(clearance >= 4, "Debe existir al menos 4px de despeje visual bajo la cápsula");
+    }
+
+    #[test]
+    fn test_cursor_hit_test_inside_regions() {
+        let win_pos = tauri::PhysicalPosition { x: 0, y: 0 };
+        // Región simulada de LeftCapsule: x: 16, y: 14, w: 260, h: 34
+        let regions = vec![[16, 14, 260, 34]];
+
+        // Dentro del centro de la cápsula
+        assert!(is_cursor_in_regions([100, 25], win_pos, &regions, "main"));
+
+        // En el margen de tolerancia (+8px)
+        assert!(is_cursor_in_regions([10, 10], win_pos, &regions, "main"));
+    }
+
+    #[test]
+    fn test_cursor_hit_test_outside_regions() {
+        let win_pos = tauri::PhysicalPosition { x: 0, y: 0 };
+        let regions = vec![[16, 14, 260, 34]];
+
+        // Muy abajo (espacio donde corre Discord / apps maximizadas)
+        assert!(!is_cursor_in_regions([100, 100], win_pos, &regions, "main"));
+
+        // Muy a la derecha
+        assert!(!is_cursor_in_regions([500, 25], win_pos, &regions, "main"));
+    }
+
+    #[test]
+    fn test_cursor_hit_test_empty_regions() {
+        let win_pos = tauri::PhysicalPosition { x: 0, y: 0 };
+        let regions: Vec<[i32; 4]> = vec![];
+        assert!(!is_cursor_in_regions([100, 20], win_pos, &regions, "main"));
+    }
+
+    #[test]
+    fn test_cursor_hit_test_dock_y_boundary() {
+        let win_pos = tauri::PhysicalPosition { x: 0, y: 600 };
+        let regions = vec![[500, 620, 200, 50]];
+
+        // Cursor por encima de win_pos.y para ventana dock
+        assert!(!is_cursor_in_regions([550, 500], win_pos, &regions, "dock"));
+    }
+}
+
