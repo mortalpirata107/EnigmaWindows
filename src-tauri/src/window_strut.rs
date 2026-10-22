@@ -300,18 +300,19 @@ pub mod windows_appbar {
     use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
     use windows_sys::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows_sys::Win32::Graphics::Gdi::{
-        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
+        GetMonitorInfoW, MonitorFromWindow, ValidateRect, MONITORINFO, MONITOR_DEFAULTTOPRIMARY,
     };
     use windows_sys::Win32::UI::Shell::{
         SHAppBarMessage, ABE_TOP, ABM_NEW, ABM_QUERYPOS, ABM_REMOVE, ABM_SETPOS, APPBARDATA,
     };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-        GetSystemMetrics, PostQuitMessage, RegisterClassExW, SetWindowPos, ShowWindow,
-        SystemParametersInfoW, TranslateMessage, MSG, SM_CXSCREEN, SM_CYSCREEN, SPIF_SENDCHANGE,
+        GetSystemMetrics, GetWindowRect, PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes,
+        SetWindowPos, ShowWindow, SystemParametersInfoW, TranslateMessage, MSG,
+        HWND_TOPMOST, LWA_ALPHA, SM_CXSCREEN, SM_CYSCREEN, SPIF_SENDCHANGE,
         SPIF_UPDATEINIFILE, SPI_GETWORKAREA, SPI_SETWORKAREA, SWP_NOACTIVATE, SWP_NOZORDER,
-        SW_SHOWNA, WM_DESTROY, WM_USER, WNDCLASSEXW, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW,
-        WS_EX_TRANSPARENT, WS_POPUP,
+        SWP_SHOWWINDOW, SW_SHOWNA, WM_DESTROY, WM_ERASEBKGND, WM_PAINT, WM_USER, WNDCLASSEXW,
+        WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TRANSPARENT, WS_POPUP,
     };
 
     pub const WM_APPBAR_NOTIFY: u32 = WM_USER + 101;
@@ -325,6 +326,58 @@ pub mod windows_appbar {
     // Ciclo de vida atómico: 0 = No iniciado, 1 = Inicializando (hilo activo), 2 = Registrado
     static APPBAR_INIT_STATE: AtomicU8 = AtomicU8::new(0);
 
+    // Anclaje nativo inamovible de la ventana "main" de Tauri en coordenadas físicas del monitor
+    static MAIN_HWND: AtomicIsize = AtomicIsize::new(0);
+    static MAIN_MON_X: AtomicI32 = AtomicI32::new(0);
+    static MAIN_MON_Y: AtomicI32 = AtomicI32::new(0);
+    static MAIN_MON_W: AtomicI32 = AtomicI32::new(0);
+    static MAIN_MON_H: AtomicI32 = AtomicI32::new(0);
+
+    pub fn register_main_window_anchor(hwnd: isize, x: i32, y: i32, w: i32, h: i32) {
+        MAIN_HWND.store(hwnd, Ordering::SeqCst);
+        MAIN_MON_X.store(x, Ordering::SeqCst);
+        MAIN_MON_Y.store(y, Ordering::SeqCst);
+        MAIN_MON_W.store(w, Ordering::SeqCst);
+        MAIN_MON_H.store(h, Ordering::SeqCst);
+        reanchor_main_window();
+    }
+
+    pub fn reanchor_main_window() {
+        let hwnd = MAIN_HWND.load(Ordering::SeqCst) as HWND;
+        if hwnd == 0 {
+            return;
+        }
+        unsafe {
+            let x = MAIN_MON_X.load(Ordering::SeqCst);
+            let y = MAIN_MON_Y.load(Ordering::SeqCst);
+            let w = MAIN_MON_W.load(Ordering::SeqCst);
+            let h = MAIN_MON_H.load(Ordering::SeqCst);
+            if w <= 0 || h <= 0 {
+                return;
+            }
+
+            let mut rect: RECT = std::mem::zeroed();
+            let needs_move = if GetWindowRect(hwnd, &mut rect) != 0 {
+                rect.left != x || rect.top != y || (rect.right - rect.left) != w || (rect.bottom - rect.top) != h
+            } else {
+                true
+            };
+
+            if needs_move {
+                eprintln!("[AppBar] Re-anchoring main window to physical monitor top ({}, {}) [current: ({}, {})]", x, y, rect.left, rect.top);
+                SetWindowPos(
+                    hwnd,
+                    HWND_TOPMOST,
+                    x,
+                    y,
+                    w,
+                    h,
+                    SWP_NOACTIVATE | SWP_SHOWWINDOW,
+                );
+            }
+        }
+    }
+
     unsafe extern "system" fn appbar_wndproc(
         hwnd: HWND,
         msg: u32,
@@ -332,12 +385,18 @@ pub mod windows_appbar {
         lparam: LPARAM,
     ) -> LRESULT {
         match msg {
+            WM_ERASEBKGND => 1,
+            WM_PAINT => {
+                ValidateRect(hwnd, std::ptr::null());
+                0
+            }
             WM_APPBAR_NOTIFY => {
                 // Notificación ABN_POSCHANGED (código 1): monitor, resolución o barra cambiada
                 if wparam as u32 == 1 {
                     reposition_appbar(hwnd);
                     let height = APPBAR_HEIGHT.load(Ordering::SeqCst);
                     enforce_workarea_top(height);
+                    reanchor_main_window();
                 }
                 0
             }
@@ -390,6 +449,9 @@ pub mod windows_appbar {
             abd.rc.bottom - abd.rc.top,
             SWP_NOACTIVATE | SWP_NOZORDER,
         );
+
+        // Reanclar de inmediato la ventana "main" de Tauri para neutralizar cualquier desplazamiento forzado por Shell
+        reanchor_main_window();
     }
 
     pub fn enforce_workarea_top(target_top: i32) {
@@ -414,6 +476,7 @@ pub mod windows_appbar {
                         &mut new_work as *mut _ as *mut _,
                         SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
                     );
+                    reanchor_main_window();
                 }
             } else {
                 let mut rc: RECT = std::mem::zeroed();
@@ -426,6 +489,7 @@ pub mod windows_appbar {
                             &mut rc as *mut _ as *mut _,
                             SPIF_SENDCHANGE | SPIF_UPDATEINIFILE,
                         );
+                        reanchor_main_window();
                     }
                 }
             }
@@ -443,6 +507,7 @@ pub mod windows_appbar {
                 unsafe {
                     reposition_appbar(hwnd);
                     enforce_workarea_top(height);
+                    reanchor_main_window();
                 }
             }
             return;
@@ -477,7 +542,7 @@ pub mod windows_appbar {
                 let screen_w = GetSystemMetrics(SM_CXSCREEN);
                 let current_h = APPBAR_HEIGHT.load(Ordering::SeqCst);
                 let hwnd = CreateWindowExW(
-                    WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
+                    WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT | WS_EX_LAYERED,
                     class_name.as_ptr(),
                     std::ptr::null(),
                     WS_POPUP,
@@ -498,6 +563,9 @@ pub mod windows_appbar {
                     return;
                 }
 
+                // Ventana proxy 100% transparente: elimina permanentemente cualquier franja blanca o artefacto
+                SetLayeredWindowAttributes(hwnd, 0, 0, LWA_ALPHA);
+
                 APPBAR_HWND.store(hwnd as isize, Ordering::SeqCst);
 
                 let mut abd: APPBARDATA = std::mem::zeroed();
@@ -512,8 +580,9 @@ pub mod windows_appbar {
                 ShowWindow(hwnd, SW_SHOWNA);
                 let final_h = APPBAR_HEIGHT.load(Ordering::SeqCst);
                 enforce_workarea_top(final_h);
+                reanchor_main_window();
 
-                eprintln!("[AppBar] EnigmaOS Windows AppBar registrada con éxito (reserva superior: {}px)", final_h);
+                eprintln!("[AppBar] EnigmaOS Windows AppBar registrada con éxito (reserva superior transparente: {}px)", final_h);
 
                 let mut msg: MSG = std::mem::zeroed();
                 while GetMessageW(&mut msg, 0, 0, 0) > 0 {
@@ -523,7 +592,7 @@ pub mod windows_appbar {
             }
         });
 
-        // Centinela único en segundo plano: mantiene permanentemente protegido el WorkArea ante reseteos de Explorer
+        // Centinela único en segundo plano: mantiene permanentemente protegido el WorkArea y el anclaje de la TopBar
         std::thread::spawn(move || {
             loop {
                 std::thread::sleep(std::time::Duration::from_millis(1000));
@@ -531,6 +600,7 @@ pub mod windows_appbar {
                 let height = APPBAR_HEIGHT.load(Ordering::SeqCst);
                 if hwnd != 0 && APPBAR_REGISTERED.load(Ordering::SeqCst) {
                     enforce_workarea_top(height);
+                    reanchor_main_window();
                 }
             }
         });
@@ -605,13 +675,36 @@ pub fn setup_window_for_platform(window: &WebviewWindow) {
                 let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y + dock_y));
             } else {
                 // Main window: dynamically sizes to monitor width and full logical height with transparent background
-                // and native hardware click-through, completely eliminating window clipping on any resolution
+                // and native hardware click-through, completely eliminating window clipping on any resolution.
+                // Anclamos firmemente en mon_pos físico (0, 0 en monitor primario) sin desfases.
                 let main_h: f64 = logical_h;
                 let _ = window.set_size(tauri::LogicalSize::new(logical_w, main_h));
-                let _ = window.set_position(tauri::LogicalPosition::new(mon_x, mon_y));
+                let _ = window.set_position(tauri::PhysicalPosition::new(mon_pos.x, mon_pos.y));
 
                 let bar_h_px = (windows_appbar::TOPBAR_BASE_HEIGHT as f64 * scale_factor).round() as i32;
                 windows_appbar::init_appbar(bar_h_px);
+
+                let raw_hwnd = window.hwnd().ok().map(|h| h as isize).unwrap_or(0);
+                windows_appbar::register_main_window_anchor(
+                    raw_hwnd,
+                    mon_pos.x,
+                    mon_pos.y,
+                    size.width as i32,
+                    size.height as i32,
+                );
+
+                // Reintentos escalonados para contrarrestar de inmediato el desplazamiento asíncrono del Windows Shell
+                let win_main = window.clone();
+                let p_pos = tauri::PhysicalPosition::new(mon_pos.x, mon_pos.y);
+                let p_size = tauri::PhysicalSize::new(size.width, size.height);
+                std::thread::spawn(move || {
+                    for delay in [50, 150, 350, 800, 1500] {
+                        std::thread::sleep(std::time::Duration::from_millis(delay));
+                        let _ = win_main.set_size(p_size);
+                        let _ = win_main.set_position(p_pos);
+                        windows_appbar::reanchor_main_window();
+                    }
+                });
             }
         }
         // Start in click-through mode until cursor moves into notch/dock

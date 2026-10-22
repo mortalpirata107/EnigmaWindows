@@ -1,6 +1,6 @@
 {
   "name": "enigmaos",
-  "version": "1.1.16",
+  "version": "1.1.17",
   "description": "EnigmaOS - AI-Powered Desktop Shell & Intelligence Layer",
   "private": true,
   "type": "module",

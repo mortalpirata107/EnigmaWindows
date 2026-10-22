@@ -86,7 +86,7 @@ export const TopBarLayout: React.FC = () => {
       {/* 1. Cápsula Izquierda: Isla flotante anclada con margen superior (top-3.5 = 14px) y lateral */}
       <div 
         className="pointer-events-auto absolute top-3.5 left-3 sm:left-4 m-0 p-0 z-30"
-        style={{ willChange: 'transform' }}
+        style={{ top: 14, willChange: 'transform' }}
       >
         <LeftCapsule 
           innerRef={leftRef} 
@@ -106,7 +106,7 @@ export const TopBarLayout: React.FC = () => {
       {/* 3. Cápsula Derecha: Isla flotante anclada con margen superior (top-3.5 = 14px) y lateral */}
       <div 
         className="pointer-events-auto absolute top-3.5 right-3 sm:right-4 m-0 p-0 z-30"
-        style={{ willChange: 'transform' }}
+        style={{ top: 14, willChange: 'transform' }}
       >
         <RightCapsule 
           innerRef={rightRef}
